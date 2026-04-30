@@ -17,10 +17,10 @@ import java.util.Map;
 import java.util.Set;
 
 final class ReportService {
-    private final SqliteUsageStore usageStore;
+    private final UsageStore usageStore;
     private final ZoneId zone;
 
-    ReportService(SqliteUsageStore usageStore, ZoneId zone) {
+    ReportService(UsageStore usageStore, ZoneId zone) {
         this.usageStore = usageStore;
         this.zone = zone;
     }

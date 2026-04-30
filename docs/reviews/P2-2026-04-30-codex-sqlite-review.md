@@ -89,6 +89,39 @@ powershell -ExecutionPolicy Bypass -File scripts\P2-2026-04-30-smoke-test.ps1
 - Maven：`BUILD SUCCESS`。
 - P2 smoke test：`P2 smoke test passed`。
 
+## mac 修复追加 review
+
+状态：通过。
+
+追加检查范围：
+
+- dashboard startup ingestion。
+- 默认 SQLite 月分片。
+- `--db` 单文件兼容。
+- mac smoke test。
+- 真实 Codex session ingestion。
+
+检查结果：
+
+- dashboard 启动前会执行一次本地 Codex ingestion，页面仍只消费只读 `/api/report`。
+- 默认路径改为 `~/.agent-dashboard/sqlite/agent-dashboard-YYYY-MM.sqlite`，`--db` 指向 `.sqlite` / `.db` 时继续单文件兼容。
+- Codex session 文件优先按路径中的 `YYYY/MM/DD` 归属月份分片，避免用文件修改时间误分片。
+- 真实 mac Codex sessions 临时 ingestion 结果为 `files_scanned=4`、`events_inserted=116`、`errors=[]`。
+- 2026-04-24 的旧 Codex session 文件被扫描并记录 checkpoint，但没有 `token_count`、`total_token_usage`、`input_tokens` 或 `output_tokens`，因此不生成 usage event；该行为符合“不推算虚假 token”的 P2 口径。
+
+mac 复验命令：
+
+```bash
+mvn -DskipTests package
+sh scripts/P2-2026-04-30-smoke-test.sh
+```
+
+mac 复验结果：
+
+- Maven：`BUILD SUCCESS`。
+- P2 mac smoke test：`P2 smoke test passed`。
+- Codex 沙箱无法绑定本地 HTTP 端口，错误为 `java.net.SocketException: Operation not permitted`，属于沙箱限制；真实终端可继续用同一脚本验证 server 路径。
+
 ## 后续架构修正
 
 P2 验收后发现原实现存在维护性问题：前端 HTML、HTTP、ingestion、SQLite、report aggregation 曾集中在单个 Java 类中，且 SQL 曾以内联字符串存在于 Java 代码中。

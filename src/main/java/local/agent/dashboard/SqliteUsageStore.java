@@ -14,7 +14,7 @@ import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 
-final class SqliteUsageStore {
+final class SqliteUsageStore implements UsageStore {
     private final Path dbPath;
     private final SqlScripts scripts;
 
@@ -23,7 +23,7 @@ final class SqliteUsageStore {
         this.scripts = SqlScripts.load("/db/schema-v1.sql");
     }
 
-    void initialize() throws SQLException, IOException {
+    public void initialize() throws SQLException, IOException {
         Path parent = dbPath.toAbsolutePath().getParent();
         if (parent != null) {
             Files.createDirectories(parent);
@@ -44,11 +44,11 @@ final class SqliteUsageStore {
         }
     }
 
-    SourceFileRecord findSourceFile(Path file) throws SQLException {
+    public SourceFileRecord findSourceFile(SourceFileState state) throws SQLException {
         try (Connection connection = connect();
              PreparedStatement statement = connection.prepareStatement(scripts.statement("find_source_file"))) {
             statement.setString(1, "codex");
-            statement.setString(2, normalized(file));
+            statement.setString(2, state.path());
             try (ResultSet rs = statement.executeQuery()) {
                 if (!rs.next()) {
                     return null;
@@ -59,8 +59,8 @@ final class SqliteUsageStore {
         }
     }
 
-    long upsertSourceFile(SourceFileState state, int lastLine, Instant lastEventTimestamp,
-                          String status, String lastError) throws SQLException {
+    public long upsertSourceFile(SourceFileState state, int lastLine, Instant lastEventTimestamp,
+                                 String status, String lastError) throws SQLException {
         try (Connection connection = connect();
              PreparedStatement statement = connection.prepareStatement(scripts.statement("upsert_source_file"))) {
             statement.setString(1, "codex");
@@ -75,14 +75,14 @@ final class SqliteUsageStore {
             statement.setString(10, Instant.now().toString());
             statement.executeUpdate();
         }
-        SourceFileRecord record = findSourceFile(Path.of(state.path()));
+        SourceFileRecord record = findSourceFile(state);
         if (record == null) {
             throw new SQLException("source file upsert did not return a row");
         }
         return record.id();
     }
 
-    boolean insertUsageEvent(long sourceFileId, IngestedUsageEvent event) throws SQLException {
+    public boolean insertUsageEvent(long sourceFileId, IngestedUsageEvent event) throws SQLException {
         try (Connection connection = connect();
              PreparedStatement statement = connection.prepareStatement(scripts.statement("insert_usage_event"))) {
             statement.setLong(1, sourceFileId);
@@ -103,7 +103,7 @@ final class SqliteUsageStore {
         }
     }
 
-    List<UsageEvent> loadEvents(LocalDate startDate, LocalDate endDate) throws SQLException {
+    public List<UsageEvent> loadEvents(LocalDate startDate, LocalDate endDate) throws SQLException {
         List<UsageEvent> events = new ArrayList<>();
         try (Connection connection = connect();
              PreparedStatement statement = connection.prepareStatement(scripts.statement("load_usage_events"))) {
@@ -130,7 +130,4 @@ final class SqliteUsageStore {
         return DriverManager.getConnection("jdbc:sqlite:" + dbPath.toAbsolutePath());
     }
 
-    private static String normalized(Path path) {
-        return path.toAbsolutePath().normalize().toString();
-    }
 }

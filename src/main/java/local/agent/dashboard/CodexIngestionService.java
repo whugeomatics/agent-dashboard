@@ -14,9 +14,9 @@ import java.util.Optional;
 final class CodexIngestionService {
     private final Path sessionsDir;
     private final ZoneId zone;
-    private final SqliteUsageStore usageStore;
+    private final UsageStore usageStore;
 
-    CodexIngestionService(Path sessionsDir, ZoneId zone, SqliteUsageStore usageStore) {
+    CodexIngestionService(Path sessionsDir, ZoneId zone, UsageStore usageStore) {
         this.sessionsDir = sessionsDir;
         this.zone = zone;
         this.usageStore = usageStore;
@@ -50,7 +50,7 @@ final class CodexIngestionService {
     private void ingestFile(Path file, IngestionResult result) {
         try {
             SourceFileState state = SourceFileState.from(file);
-            SourceFileRecord current = usageStore.findSourceFile(file);
+            SourceFileRecord current = usageStore.findSourceFile(state);
             if (current != null && current.sameFile(state)) {
                 return;
             }

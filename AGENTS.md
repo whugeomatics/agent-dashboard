@@ -35,22 +35,21 @@
 
 ## 2. 当前阶段
 
-当前阶段：P3 设计准备。
+当前阶段：P2 mac 修复与补验收。
 
-P1 和 P2 已通过验收。下一步只聚焦 P3：OpenAI-compatible 本地模型网关的设计、contract、任务拆分和验收标准。P3 仍然遵守“先设计、再开发、文档落地”的方针；在 P3 设计和 contract 补齐前，不应直接实现网关代码。
+P1 已通过验收。P2 在 mac 环境发现 dashboard 只读取 SQLite 但未自动触发 Codex session ingestion，导致页面无实际 session/token 值；同时 P2 初始单 SQLite 文件不利于长期清理历史数据。当前先完成 P2 mac 修复、文档更新和 smoke test，P3 设计准备暂缓。
 
 当前阶段目标：
 
-1. 明确本地网关的最小 MVP 边界。
-2. 设计 OpenAI-compatible endpoint contract。
-3. 设计 provider adapter contract。
-4. 设计 usage event contract，复用 P2 SQLite 统计能力。
-5. 明确流式响应、错误记录、token usage 记录和隐私边界。
-6. 拆分 P3 开发任务和验收标准。
+1. dashboard 启动前执行一次本地 Codex ingestion，避免页面只读空 SQLite。
+2. 保留 `--ingest` CLI 和 `/api/report` 只读 contract。
+3. 默认 SQLite 存储改为按月分片，支持删除历史分片。
+4. `--db` 指向 `.sqlite` / `.db` 时继续单文件兼容。
+5. 补充 mac smoke test 和 P2 文档。
 
 当前阶段禁止：
 
-- 不直接实现网关代码，直到 P3 设计、contract、tasks、acceptance 文档补齐。
+- 不直接实现 P3 网关代码，直到 P2 mac 修复重新验收并恢复 P3 设计阶段。
 - 不接入 Claude Code、Cursor。
 - 不实现多 provider 自动路由。
 - 不引入登录、云同步、计费系统。
@@ -147,12 +146,13 @@ P3 不能只以“服务能启动”为完成标准。验收至少覆盖：
 
 P2 长期保留约定：
 
-- SQLite 默认路径为 `%USERPROFILE%\.agent-dashboard\agent-dashboard.sqlite`，可由 `AGENT_DASHBOARD_DB` 覆盖。
+- SQLite 默认路径为 `%USERPROFILE%\.agent-dashboard\sqlite\agent-dashboard-YYYY-MM.sqlite` 月分片，可由 `AGENT_DASHBOARD_DB` 覆盖；覆盖值指向 `.sqlite` / `.db` 文件时使用单文件兼容模式。
 - SQLite 访问统一使用 `org.xerial:sqlite-jdbc` 和 JDBC API；业务层不得直接创建数据库连接。
 - 所有 SQLite DDL/DML 必须集中在 `src/main/resources/db/*.sql`，Java 代码只读取命名 SQL 并执行，不内联建表或查询 SQL。
 - P2 ingestion 通过 CLI `--ingest` 触发。
 - usage event 持久化 delta，不持久化 cumulative snapshot。
 - changed source file 从头重放并依赖 `event_key` 去重，避免缺少上一条 cumulative snapshot 时错算 delta。
+- 没有 `token_count` 的 Codex session 只记录 source checkpoint，不生成 usage event，不根据正文或文件内容推算 token。
 - 不存 prompt/response 正文。
 - `/api/report` contract 继续兼容 P1。
 

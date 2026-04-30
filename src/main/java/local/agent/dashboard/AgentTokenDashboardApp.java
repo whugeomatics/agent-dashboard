@@ -6,7 +6,7 @@ public final class AgentTokenDashboardApp {
 
     public static void main(String[] args) throws Exception {
         AppConfig config = AppConfig.from(args);
-        SqliteUsageStore usageStore = new SqliteUsageStore(config.dbPath());
+        UsageStore usageStore = UsageStores.open(config.dbPath());
         usageStore.initialize();
 
         if (config.ingestMode()) {
@@ -24,6 +24,9 @@ public final class AgentTokenDashboardApp {
             System.out.println(reportService.report(query).toJson());
             return;
         }
+
+        IngestionResult startupIngestion = new CodexIngestionService(config.sessionsDir(), config.zone(), usageStore).ingest();
+        System.out.println("Startup ingestion: " + startupIngestion.toJson());
 
         DashboardServer server = new DashboardServer(config.port(), reportService);
         server.start();

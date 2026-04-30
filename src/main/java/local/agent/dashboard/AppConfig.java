@@ -71,7 +71,7 @@ record AppConfig(Path sessionsDir, Path dbPath, ZoneId zone, int port,
         if (override != null && !override.isBlank()) {
             return Path.of(override);
         }
-        return Path.of(System.getProperty("user.home"), ".agent-dashboard", "agent-dashboard.sqlite");
+        return Path.of(System.getProperty("user.home"), ".agent-dashboard", "sqlite");
     }
 
     private static ZoneId zone(String[] args, Path sessionsDir) {

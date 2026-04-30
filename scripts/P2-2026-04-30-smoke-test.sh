@@ -1,0 +1,61 @@
+#!/usr/bin/env sh
+set -eu
+
+ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
+JAR="$ROOT/target/agent-dashboard-0.1.0-SNAPSHOT.jar"
+WORK="$(mktemp -d "${TMPDIR:-/tmp}/agent-dashboard-p2.XXXXXX")"
+SESSIONS="$WORK/sessions/2026/04/30"
+DB_FILE="$WORK/agent-dashboard.sqlite"
+DB_DIR="$WORK/sqlite"
+JSONL="$SESSIONS/rollout-smoke.jsonl"
+
+mkdir -p "$SESSIONS"
+
+cat > "$JSONL" <<'JSONL'
+{"timestamp":"2026-04-30T01:00:00Z","type":"session_meta","payload":{"id":"p2-smoke-session"}}
+{"timestamp":"2026-04-30T01:00:01Z","type":"turn_context","payload":{"model":"gpt-5-smoke"}}
+{"timestamp":"2026-04-30T01:00:02Z","type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":100,"cached_input_tokens":20,"output_tokens":30,"reasoning_output_tokens":5,"total_tokens":130}}}}
+{"timestamp":"2026-04-30T01:00:03Z","type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":150,"cached_input_tokens":20,"output_tokens":70,"reasoning_output_tokens":10,"total_tokens":220}}}}
+JSONL
+
+ingest1="$(java -jar "$JAR" --ingest --sessions-dir="$SESSIONS" --db="$DB_FILE" --timezone=Asia/Shanghai)"
+printf '%s\n' "$ingest1" | grep '"status":"ok"' >/dev/null
+printf '%s\n' "$ingest1" | grep '"events_inserted":2' >/dev/null
+
+ingest2="$(java -jar "$JAR" --ingest --sessions-dir="$SESSIONS" --db="$DB_FILE" --timezone=Asia/Shanghai)"
+printf '%s\n' "$ingest2" | grep '"status":"ok"' >/dev/null
+printf '%s\n' "$ingest2" | grep '"events_inserted":0' >/dev/null
+
+report_file="$(java -jar "$JAR" --report --days=30 --db="$DB_FILE" --timezone=Asia/Shanghai)"
+printf '%s\n' "$report_file" | grep '"total_tokens":220' >/dev/null
+printf '%s\n' "$report_file" | grep '"session_id":"p2-smoke-session"' >/dev/null
+
+ingest_sharded="$(java -jar "$JAR" --ingest --sessions-dir="$SESSIONS" --db="$DB_DIR" --timezone=Asia/Shanghai)"
+printf '%s\n' "$ingest_sharded" | grep '"status":"ok"' >/dev/null
+printf '%s\n' "$ingest_sharded" | grep '"events_inserted":2' >/dev/null
+test -f "$DB_DIR/agent-dashboard-2026-04.sqlite"
+
+report_sharded="$(java -jar "$JAR" --report --days=30 --db="$DB_DIR" --timezone=Asia/Shanghai)"
+printf '%s\n' "$report_sharded" | grep '"total_tokens":220' >/dev/null
+printf '%s\n' "$report_sharded" | grep '"model":"gpt-5-smoke"' >/dev/null
+
+SERVER_DB_DIR="$WORK/startup-sqlite"
+PORT=$((18080 + ($$ % 1000)))
+java -jar "$JAR" --sessions-dir="$SESSIONS" --db="$SERVER_DB_DIR" --timezone=Asia/Shanghai --port="$PORT" > "$WORK/server.log" 2>&1 &
+SERVER_PID=$!
+sleep 2
+if server_report="$(curl --noproxy '*' -fsS "http://127.0.0.1:$PORT/api/report?days=30" 2>/dev/null)"; then
+    kill "$SERVER_PID" >/dev/null 2>&1 || true
+    wait "$SERVER_PID" >/dev/null 2>&1 || true
+    printf '%s\n' "$server_report" | grep '"total_tokens":220' >/dev/null
+    test -f "$SERVER_DB_DIR/agent-dashboard-2026-04.sqlite"
+else
+    kill "$SERVER_PID" >/dev/null 2>&1 || true
+    wait "$SERVER_PID" >/dev/null 2>&1 || true
+    if ! grep 'Operation not permitted' "$WORK/server.log" >/dev/null; then
+        cat "$WORK/server.log" >&2
+        exit 1
+    fi
+fi
+
+printf '%s\n' "P2 smoke test passed"
