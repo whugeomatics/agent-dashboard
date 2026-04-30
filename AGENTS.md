@@ -8,7 +8,7 @@
 - 已完成阶段只保留状态和文档索引，不在本文件堆积执行细节。
 - 每个阶段都应形成符合该阶段目标的 `AGENTS.md`。
 - 在一个阶段周期内，根目录 `AGENTS.md` 可以随着设计、开发、review、验收发现动态调整。
-- 阶段结束时，除完成该阶段所有设计、contract、任务、review、acceptance 文档外，还必须把该阶段最终版 `AGENTS.md` 按 `P<阶段>-YYYY-MM-DD-AGENTS.md` 归档。
+- 阶段结束时，除完成该阶段所有设计、contract、任务、review、acceptance 文档外，还必须把该阶段最终版 `AGENTS.md` 按 `docs/archive/P<阶段>-YYYY-MM-DD-AGENTS.md` 归档。
 - 每个阶段完成后，把长期有效的新约定补回本文件；阶段细节沉淀到对应 docs。
 
 ## 1. 项目目标
@@ -124,7 +124,7 @@ P2 不能只以“代码能跑”为完成标准。验收至少覆盖：
 
 文档索引：
 
-- `docs/P1-2026-04-29-AGENTS.md`
+- `docs/archive/P1-2026-04-29-AGENTS.md`
 - `docs/P1-2026-04-29-README.md`
 - `docs/P1-2026-04-29-roadmap.md`
 - `docs/P1-2026-04-29-requirements.md`
@@ -189,10 +189,10 @@ P<阶段号>-YYYY-MM-DD-<主题>.md
 - `P2-2026-04-30-database-schema.md`
 - `P3-2026-05-08-openai-gateway-contract.md`
 
-`README` 和 `AGENTS` 也必须带阶段和日期归档，例如：
+`README` 必须带阶段和日期归档；阶段结束后的 `AGENTS` 最终版必须进入 `docs/archive/`，例如：
 
 - `docs/P1-2026-04-29-README.md`
-- `docs/P2-2026-04-30-AGENTS.md`
+- `docs/archive/P1-2026-04-29-AGENTS.md`
 
 ### 7.4 Review Checklist
 
@@ -272,6 +272,6 @@ Acceptance Agent：
 更新规则：
 
 - 阶段进行中可以直接调整根目录 `AGENTS.md`，但只写当前阶段真正需要的规则。
-- 阶段结束时，必须把该阶段最终版 `AGENTS.md` 归档为 `docs/P<阶段>-YYYY-MM-DD-AGENTS.md`。
+- 阶段结束时，必须把该阶段最终版 `AGENTS.md` 归档为 `docs/archive/P<阶段>-YYYY-MM-DD-AGENTS.md`。
 - 开始下一阶段前，必须确认上一阶段最终版 `AGENTS.md` 已归档。
 - 已完成阶段细节应放入对应 docs，只在本文件保留索引。

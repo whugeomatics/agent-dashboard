@@ -68,7 +68,7 @@ P1 和 P2 只聚焦 Codex。
 Agent 工作规则：
 
 - [当前 AGENTS.md](AGENTS.md)
-- [P1 AGENTS 归档](docs/P1-2026-04-29-AGENTS.md)
+- [P1 AGENTS 归档](docs/archive/P1-2026-04-29-AGENTS.md)
 
 ## 构建
 
@@ -155,5 +155,5 @@ P1 只读取 Codex JSONL metadata。P2 只持久化 usage delta metadata。
 一个阶段内，根目录 `AGENTS.md` 可以动态调整。阶段结束时，最终版必须归档为：
 
 ```text
-docs/P<阶段>-YYYY-MM-DD-AGENTS.md
+docs/archive/P<阶段>-YYYY-MM-DD-AGENTS.md
 ```

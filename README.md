@@ -68,7 +68,7 @@ Completed P1:
 Agent working rules:
 
 - [Current AGENTS.md](AGENTS.md)
-- [Archived P1 AGENTS](docs/P1-2026-04-29-AGENTS.md)
+- [Archived P1 AGENTS](docs/archive/P1-2026-04-29-AGENTS.md)
 
 ## Build
 
@@ -155,5 +155,5 @@ Each phase must have complete supporting documents before implementation:
 During a phase, root `AGENTS.md` may evolve. When a phase ends, the final version must be archived as:
 
 ```text
-docs/P<phase>-YYYY-MM-DD-AGENTS.md
+docs/archive/P<phase>-YYYY-MM-DD-AGENTS.md
 ```
