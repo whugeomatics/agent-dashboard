@@ -8,15 +8,23 @@ Agent Dashboard is a local model usage dashboard and future routing tool. The pr
 
 ## Current Status
 
-Current phase: **P2 - SQLite persistence and incremental ingestion**.
+Current phase: **P3 - OpenAI-compatible local gateway design preparation**.
 
-P1, the Codex Dashboard MVP, has passed acceptance:
+P1 and P2 have passed acceptance.
+
+P1, the Codex Dashboard MVP:
 
 - Maven package passed in the user's real Windows terminal.
 - P1 smoke test passed with `P1 smoke test passed`.
 - The dashboard can read Codex usage metadata and expose `/api/report`.
 
-P2 documentation is ready. The next implementation work is SQLite schema initialization, `--ingest` CLI, checkpointing, usage event de-duplication, and keeping `/api/report` compatible with the P1 contract.
+P2, SQLite persistence and incremental ingestion:
+
+- Maven package passed in the user's real Windows terminal.
+- P2 smoke test passed with `P2 smoke test passed`.
+- `--ingest` can write Codex usage deltas to local SQLite and `/api/report` aggregates from SQLite.
+
+The next work is P3 design documentation: OpenAI-compatible gateway contracts, provider adapter contracts, usage event contracts, task breakdown, and acceptance criteria.
 
 ## Stage Results
 
@@ -48,12 +56,18 @@ Out of scope for the current phase:
 
 Current phase:
 
+- [Current AGENTS.md](AGENTS.md)
+
+Completed P2:
+
 - [P2 README](docs/P2-2026-04-30-README.md)
-- [P2 AGENTS](docs/P2-2026-04-30-AGENTS.md)
+- [Archived P2 AGENTS](docs/archive/P2-2026-04-30-AGENTS.md)
 - [P2 Database Schema Contract](docs/contracts/P2-2026-04-30-database-schema.md)
 - [P2 Ingestion Contract](docs/contracts/P2-2026-04-30-ingestion-api.md)
 - [P2 Design](docs/milestones/P2-codex-sqlite/P2-2026-04-30-design.md)
 - [P2 Tasks](docs/milestones/P2-codex-sqlite/P2-2026-04-30-tasks.md)
+- [P2 Implementation Plan](docs/milestones/P2-codex-sqlite/P2-2026-04-30-implementation-plan.md)
+- [P2 Review](docs/reviews/P2-2026-04-30-codex-sqlite-review.md)
 - [P2 Acceptance](docs/acceptance/P2-2026-04-30-codex-sqlite.md)
 
 Completed P1:
@@ -71,6 +85,7 @@ Agent working rules:
 
 - [Current AGENTS.md](AGENTS.md)
 - [Archived P1 AGENTS](docs/archive/P1-2026-04-29-AGENTS.md)
+- [Archived P2 AGENTS](docs/archive/P2-2026-04-30-AGENTS.md)
 
 ## Build
 

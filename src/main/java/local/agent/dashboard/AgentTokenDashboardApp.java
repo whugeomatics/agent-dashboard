@@ -7,6 +7,12 @@ import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.YearMonth;
@@ -34,9 +40,21 @@ public final class AgentTokenDashboardApp {
     }
 
     public static void main(String[] args) throws Exception {
-        Path sessionsDir = sessionsDir();
-        ZoneId zone = zone(sessionsDir);
-        ReportService reportService = new ReportService(sessionsDir, zone);
+        Path sessionsDir = sessionsDir(args);
+        ZoneId zone = zone(args, sessionsDir);
+        Path dbPath = dbPath(args);
+        SqliteUsageStore usageStore = new SqliteUsageStore(dbPath);
+        usageStore.initialize();
+        if (hasFlag(args, "--ingest")) {
+            IngestionResult result = new CodexIngestionService(sessionsDir, zone, usageStore).ingest();
+            System.out.println(result.toJson());
+            if (!result.errors.isEmpty()) {
+                System.exit(1);
+            }
+            return;
+        }
+
+        ReportService reportService = new ReportService(usageStore, zone);
         if (hasFlag(args, "--report")) {
             ReportQuery query = ReportQuery.from(argsQuery(args), zone);
             System.out.println(reportService.report(query).toJson());
@@ -53,6 +71,7 @@ public final class AgentTokenDashboardApp {
 
         System.out.println("Agent Token Dashboard listening on http://127.0.0.1:" + port);
         System.out.println("Codex sessions dir: " + sessionsDir);
+        System.out.println("Agent Dashboard DB: " + dbPath);
     }
 
     private static void handleDashboard(HttpExchange exchange) throws IOException {
@@ -117,16 +136,34 @@ public final class AgentTokenDashboardApp {
         return value == null || value.isBlank() ? 18080 : Integer.parseInt(value);
     }
 
-    private static Path sessionsDir() {
-        String override = System.getenv("CODEX_SESSIONS_DIR");
+    private static Optional<String> option(String[] args, String name) {
+        String prefix = name + "=";
+        for (String arg : args) {
+            if (arg.startsWith(prefix)) {
+                return Optional.of(arg.substring(prefix.length()));
+            }
+        }
+        return Optional.empty();
+    }
+
+    private static Path sessionsDir(String[] args) {
+        String override = option(args, "--sessions-dir").orElse(System.getenv("CODEX_SESSIONS_DIR"));
         if (override != null && !override.isBlank()) {
             return Path.of(override);
         }
         return Path.of(System.getProperty("user.home"), ".codex", "sessions");
     }
 
-    private static ZoneId zone(Path sessionsDir) {
-        String override = System.getenv("DASHBOARD_TIMEZONE");
+    private static Path dbPath(String[] args) {
+        String override = option(args, "--db").orElse(System.getenv("AGENT_DASHBOARD_DB"));
+        if (override != null && !override.isBlank()) {
+            return Path.of(override);
+        }
+        return Path.of(System.getProperty("user.home"), ".agent-dashboard", "agent-dashboard.sqlite");
+    }
+
+    private static ZoneId zone(String[] args, Path sessionsDir) {
+        String override = option(args, "--timezone").orElse(System.getenv("DASHBOARD_TIMEZONE"));
         if (override != null && !override.isBlank()) {
             return ZoneId.of(override);
         }
@@ -688,11 +725,11 @@ public final class AgentTokenDashboardApp {
     }
 
     private static final class ReportService {
-        private final Path sessionsDir;
+        private final SqliteUsageStore usageStore;
         private final ZoneId zone;
 
-        private ReportService(Path sessionsDir, ZoneId zone) {
-            this.sessionsDir = sessionsDir;
+        private ReportService(SqliteUsageStore usageStore, ZoneId zone) {
+            this.usageStore = usageStore;
             this.zone = zone;
         }
 
@@ -700,8 +737,8 @@ public final class AgentTokenDashboardApp {
             return zone;
         }
 
-        Report report(ReportQuery query) throws IOException {
-            List<UsageEvent> events = readUsageEvents();
+        Report report(ReportQuery query) throws SQLException {
+            List<UsageEvent> events = usageStore.loadEvents(query.startDate(), query.endDate());
             Aggregator aggregator = new Aggregator(query);
             for (UsageEvent event : events) {
                 if (query.contains(event.timestamp())) {
@@ -710,10 +747,23 @@ public final class AgentTokenDashboardApp {
             }
             return aggregator.toReport();
         }
+    }
 
-        private List<UsageEvent> readUsageEvents() throws IOException {
+    private static final class CodexIngestionService {
+        private final Path sessionsDir;
+        private final ZoneId zone;
+        private final SqliteUsageStore usageStore;
+
+        CodexIngestionService(Path sessionsDir, ZoneId zone, SqliteUsageStore usageStore) {
+            this.sessionsDir = sessionsDir;
+            this.zone = zone;
+            this.usageStore = usageStore;
+        }
+
+        IngestionResult ingest() {
+            IngestionResult result = new IngestionResult();
             if (!Files.isDirectory(sessionsDir)) {
-                return List.of();
+                return result;
             }
 
             List<Path> files;
@@ -723,56 +773,375 @@ public final class AgentTokenDashboardApp {
                         .filter(path -> path.getFileName().toString().endsWith(".jsonl"))
                         .sorted()
                         .toList();
+            } catch (IOException e) {
+                result.errors.add(IngestionError.general(sessionsDir.toString(), "scan error: " + e.getClass().getSimpleName()));
+                return result;
             }
 
-            List<UsageEvent> events = new ArrayList<>();
+            result.filesScanned = files.size();
             for (Path file : files) {
-                readSessionFile(file, events);
+                try {
+                    SourceFileState state = SourceFileState.from(file);
+                    SourceFileRecord current = usageStore.findSourceFile(file);
+                    if (current != null && current.sameFile(state)) {
+                        continue;
+                    }
+                    result.filesChanged++;
+                    FileIngestion fileResult = readSessionFile(file);
+                    long sourceFileId = usageStore.upsertSourceFile(state, fileResult.lastLine, fileResult.lastEventTimestamp,
+                            fileResult.errors.isEmpty() ? "active" : "error", fileResult.lastError());
+                    for (IngestedUsageEvent event : fileResult.events) {
+                        if (usageStore.insertUsageEvent(sourceFileId, event)) {
+                            result.eventsInserted++;
+                        } else {
+                            result.eventsSkipped++;
+                        }
+                    }
+                    result.errors.addAll(fileResult.errors);
+                } catch (Exception e) {
+                    result.errors.add(IngestionError.general(file.toString(), "file error: " + e.getClass().getSimpleName()));
+                }
             }
-            events.sort(Comparator.comparing(UsageEvent::timestamp));
-            return events;
+            return result;
         }
 
-        private void readSessionFile(Path file, List<UsageEvent> events) throws IOException {
+        private FileIngestion readSessionFile(Path file) throws IOException {
+            FileIngestion result = new FileIngestion();
             String sessionId = fallbackSessionId(file);
             String currentModel = "unknown";
             Snapshot previous = null;
+            int lineNumber = 0;
 
             for (String line : Files.readAllLines(file, StandardCharsets.UTF_8)) {
+                lineNumber++;
                 if (line.isBlank()) {
+                    result.lastLine = lineNumber;
                     continue;
                 }
-                String topType = Json.firstString(line, "type").orElse("");
-                if ("session_meta".equals(topType)) {
-                    sessionId = Json.firstString(line, "id").orElse(sessionId);
-                    continue;
-                }
-                if ("turn_context".equals(topType)) {
-                    currentModel = Json.firstString(line, "model").orElse(currentModel);
-                    continue;
-                }
-                if (!"event_msg".equals(topType) || !Json.stringOccurrences(line, "type").contains("token_count")) {
-                    continue;
-                }
+                try {
+                    String topType = Json.firstString(line, "type").orElse("");
+                    if ("session_meta".equals(topType)) {
+                        sessionId = Json.firstString(line, "id").orElse(sessionId);
+                        result.lastLine = lineNumber;
+                        continue;
+                    }
+                    if ("turn_context".equals(topType)) {
+                        currentModel = Json.firstString(line, "model").orElse(currentModel);
+                        result.lastLine = lineNumber;
+                        continue;
+                    }
+                    if (!"event_msg".equals(topType) || !Json.stringOccurrences(line, "type").contains("token_count")) {
+                        result.lastLine = lineNumber;
+                        continue;
+                    }
 
-                Instant timestamp = Json.firstString(line, "timestamp").map(Instant::parse).orElse(null);
-                Snapshot cumulative = Snapshot.fromObject(line, "total_token_usage").orElse(null);
-                if (timestamp == null || cumulative == null) {
-                    continue;
-                }
+                    Instant timestamp = Json.firstString(line, "timestamp").map(Instant::parse).orElse(null);
+                    Snapshot cumulative = Snapshot.fromObject(line, "total_token_usage").orElse(null);
+                    if (timestamp == null || cumulative == null) {
+                        result.lastLine = lineNumber;
+                        continue;
+                    }
 
-                Snapshot delta = previous == null ? cumulative : cumulative.minus(previous);
-                previous = cumulative;
-                if (!delta.hasPositiveUsage()) {
-                    continue;
+                    Snapshot delta = previous == null ? cumulative : cumulative.minus(previous);
+                    previous = cumulative;
+                    result.lastLine = lineNumber;
+                    if (!delta.hasPositiveUsage()) {
+                        continue;
+                    }
+                    result.lastEventTimestamp = timestamp;
+                    result.events.add(new IngestedUsageEvent(file.toAbsolutePath().normalize().toString(), lineNumber,
+                            sessionId, currentModel, timestamp, timestamp.atZone(zone).toLocalDate(), cumulative, delta));
+                } catch (Exception e) {
+                    result.errors.add(new IngestionError(file.toString(), lineNumber, "parse error: " + e.getClass().getSimpleName()));
                 }
-                events.add(new UsageEvent(sessionId, currentModel, timestamp, delta));
             }
+            return result;
         }
 
         private String fallbackSessionId(Path file) {
             String name = file.getFileName().toString();
             return name.endsWith(".jsonl") ? name.substring(0, name.length() - ".jsonl".length()) : name;
+        }
+    }
+
+    private static final class SqliteUsageStore {
+        private final Path dbPath;
+
+        SqliteUsageStore(Path dbPath) {
+            this.dbPath = dbPath;
+        }
+
+        void initialize() throws SQLException, IOException {
+            Path parent = dbPath.toAbsolutePath().getParent();
+            if (parent != null) {
+                Files.createDirectories(parent);
+            }
+            try (Connection connection = connect(); Statement statement = connection.createStatement()) {
+                statement.executeUpdate("""
+                        CREATE TABLE IF NOT EXISTS schema_migrations (
+                          version INTEGER PRIMARY KEY,
+                          applied_at TEXT NOT NULL
+                        )
+                        """);
+                statement.executeUpdate("""
+                        CREATE TABLE IF NOT EXISTS source_files (
+                          id INTEGER PRIMARY KEY AUTOINCREMENT,
+                          tool TEXT NOT NULL,
+                          path TEXT NOT NULL,
+                          size_bytes INTEGER NOT NULL,
+                          modified_at TEXT NOT NULL,
+                          last_line INTEGER NOT NULL,
+                          last_event_timestamp TEXT,
+                          file_fingerprint TEXT NOT NULL,
+                          status TEXT NOT NULL,
+                          last_error TEXT,
+                          scanned_at TEXT NOT NULL,
+                          UNIQUE(tool, path)
+                        )
+                        """);
+                statement.executeUpdate("""
+                        CREATE TABLE IF NOT EXISTS usage_events (
+                          id INTEGER PRIMARY KEY AUTOINCREMENT,
+                          source_file_id INTEGER NOT NULL,
+                          line_number INTEGER NOT NULL,
+                          event_key TEXT NOT NULL,
+                          tool TEXT NOT NULL,
+                          session_id TEXT NOT NULL,
+                          model TEXT NOT NULL,
+                          event_timestamp TEXT NOT NULL,
+                          local_date TEXT NOT NULL,
+                          input_tokens INTEGER NOT NULL,
+                          cached_input_tokens INTEGER NOT NULL,
+                          output_tokens INTEGER NOT NULL,
+                          reasoning_output_tokens INTEGER NOT NULL,
+                          total_tokens INTEGER NOT NULL,
+                          created_at TEXT NOT NULL,
+                          FOREIGN KEY(source_file_id) REFERENCES source_files(id),
+                          UNIQUE(event_key)
+                        )
+                        """);
+                statement.executeUpdate("CREATE INDEX IF NOT EXISTS idx_usage_events_local_date ON usage_events(local_date)");
+                statement.executeUpdate("CREATE INDEX IF NOT EXISTS idx_usage_events_model ON usage_events(model)");
+                statement.executeUpdate("CREATE INDEX IF NOT EXISTS idx_usage_events_session ON usage_events(session_id)");
+                statement.executeUpdate("CREATE INDEX IF NOT EXISTS idx_usage_events_timestamp ON usage_events(event_timestamp)");
+                statement.executeUpdate("INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES (1, '" + Instant.now() + "')");
+            }
+        }
+
+        SourceFileRecord findSourceFile(Path file) throws SQLException {
+            String sql = "SELECT id, size_bytes, modified_at, file_fingerprint FROM source_files WHERE tool=? AND path=?";
+            try (Connection connection = connect(); PreparedStatement statement = connection.prepareStatement(sql)) {
+                statement.setString(1, "codex");
+                statement.setString(2, normalized(file));
+                try (ResultSet rs = statement.executeQuery()) {
+                    if (!rs.next()) {
+                        return null;
+                    }
+                    return new SourceFileRecord(rs.getLong("id"), rs.getLong("size_bytes"),
+                            rs.getString("modified_at"), rs.getString("file_fingerprint"));
+                }
+            }
+        }
+
+        long upsertSourceFile(SourceFileState state, int lastLine, Instant lastEventTimestamp,
+                              String status, String lastError) throws SQLException {
+            String now = Instant.now().toString();
+            String sql = """
+                    INSERT INTO source_files(tool, path, size_bytes, modified_at, last_line, last_event_timestamp,
+                      file_fingerprint, status, last_error, scanned_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(tool, path) DO UPDATE SET
+                      size_bytes=excluded.size_bytes,
+                      modified_at=excluded.modified_at,
+                      last_line=excluded.last_line,
+                      last_event_timestamp=excluded.last_event_timestamp,
+                      file_fingerprint=excluded.file_fingerprint,
+                      status=excluded.status,
+                      last_error=excluded.last_error,
+                      scanned_at=excluded.scanned_at
+                    """;
+            try (Connection connection = connect(); PreparedStatement statement = connection.prepareStatement(sql)) {
+                statement.setString(1, "codex");
+                statement.setString(2, state.path);
+                statement.setLong(3, state.sizeBytes);
+                statement.setString(4, state.modifiedAt);
+                statement.setInt(5, lastLine);
+                statement.setString(6, lastEventTimestamp == null ? null : lastEventTimestamp.toString());
+                statement.setString(7, state.fileFingerprint);
+                statement.setString(8, status);
+                statement.setString(9, lastError);
+                statement.setString(10, now);
+                statement.executeUpdate();
+            }
+            SourceFileRecord record = findSourceFile(Path.of(state.path));
+            if (record == null) {
+                throw new SQLException("source file upsert did not return a row");
+            }
+            return record.id;
+        }
+
+        boolean insertUsageEvent(long sourceFileId, IngestedUsageEvent event) throws SQLException {
+            String sql = """
+                    INSERT OR IGNORE INTO usage_events(source_file_id, line_number, event_key, tool, session_id,
+                      model, event_timestamp, local_date, input_tokens, cached_input_tokens, output_tokens,
+                      reasoning_output_tokens, total_tokens, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """;
+            try (Connection connection = connect(); PreparedStatement statement = connection.prepareStatement(sql)) {
+                statement.setLong(1, sourceFileId);
+                statement.setInt(2, event.lineNumber);
+                statement.setString(3, event.eventKey());
+                statement.setString(4, "codex");
+                statement.setString(5, event.sessionId);
+                statement.setString(6, event.model);
+                statement.setString(7, event.timestamp.toString());
+                statement.setString(8, event.localDate.toString());
+                statement.setLong(9, event.delta.inputTokens());
+                statement.setLong(10, event.delta.cachedInputTokens());
+                statement.setLong(11, event.delta.outputTokens());
+                statement.setLong(12, event.delta.reasoningOutputTokens());
+                statement.setLong(13, event.delta.totalTokens());
+                statement.setString(14, Instant.now().toString());
+                return statement.executeUpdate() > 0;
+            }
+        }
+
+        List<UsageEvent> loadEvents(LocalDate startDate, LocalDate endDate) throws SQLException {
+            String sql = """
+                    SELECT session_id, model, event_timestamp, input_tokens, cached_input_tokens, output_tokens,
+                      reasoning_output_tokens, total_tokens
+                    FROM usage_events
+                    WHERE local_date >= ? AND local_date <= ?
+                    ORDER BY event_timestamp, id
+                    """;
+            List<UsageEvent> events = new ArrayList<>();
+            try (Connection connection = connect(); PreparedStatement statement = connection.prepareStatement(sql)) {
+                statement.setString(1, startDate.toString());
+                statement.setString(2, endDate.toString());
+                try (ResultSet rs = statement.executeQuery()) {
+                    while (rs.next()) {
+                        Snapshot usage = new Snapshot(
+                                rs.getLong("input_tokens"),
+                                rs.getLong("cached_input_tokens"),
+                                rs.getLong("output_tokens"),
+                                rs.getLong("reasoning_output_tokens"),
+                                rs.getLong("total_tokens")
+                        );
+                        events.add(new UsageEvent(rs.getString("session_id"), rs.getString("model"),
+                                Instant.parse(rs.getString("event_timestamp")), usage));
+                    }
+                }
+            }
+            return events;
+        }
+
+        private Connection connect() throws SQLException {
+            return DriverManager.getConnection("jdbc:sqlite:" + dbPath.toAbsolutePath());
+        }
+
+        private static String normalized(Path path) {
+            return path.toAbsolutePath().normalize().toString();
+        }
+    }
+
+    private static final class SourceFileState {
+        final String path;
+        final long sizeBytes;
+        final String modifiedAt;
+        final String fileFingerprint;
+
+        private SourceFileState(String path, long sizeBytes, String modifiedAt, String fileFingerprint) {
+            this.path = path;
+            this.sizeBytes = sizeBytes;
+            this.modifiedAt = modifiedAt;
+            this.fileFingerprint = fileFingerprint;
+        }
+
+        static SourceFileState from(Path file) throws IOException {
+            String path = file.toAbsolutePath().normalize().toString();
+            long size = Files.size(file);
+            String modified = Files.getLastModifiedTime(file).toInstant().toString();
+            return new SourceFileState(path, size, modified, path + "|" + size + "|" + modified);
+        }
+    }
+
+    private record SourceFileRecord(long id, long sizeBytes, String modifiedAt, String fileFingerprint) {
+        boolean sameFile(SourceFileState state) {
+            return sizeBytes == state.sizeBytes
+                    && modifiedAt.equals(state.modifiedAt)
+                    && fileFingerprint.equals(state.fileFingerprint);
+        }
+    }
+
+    private static final class FileIngestion {
+        final List<IngestedUsageEvent> events = new ArrayList<>();
+        final List<IngestionError> errors = new ArrayList<>();
+        int lastLine;
+        Instant lastEventTimestamp;
+
+        String lastError() {
+            return errors.isEmpty() ? null : errors.get(errors.size() - 1).message;
+        }
+    }
+
+    private static final class IngestedUsageEvent {
+        final String sourcePath;
+        final int lineNumber;
+        final String sessionId;
+        final String model;
+        final Instant timestamp;
+        final LocalDate localDate;
+        final Snapshot cumulative;
+        final Snapshot delta;
+
+        private IngestedUsageEvent(String sourcePath, int lineNumber, String sessionId, String model,
+                                   Instant timestamp, LocalDate localDate, Snapshot cumulative, Snapshot delta) {
+            this.sourcePath = sourcePath;
+            this.lineNumber = lineNumber;
+            this.sessionId = sessionId;
+            this.model = model;
+            this.timestamp = timestamp;
+            this.localDate = localDate;
+            this.cumulative = cumulative;
+            this.delta = delta;
+        }
+
+        String eventKey() {
+            return "codex|" + sessionId + "|" + sourcePath + "|" + lineNumber + "|"
+                    + cumulative.totalTokens() + "|" + cumulative.inputTokens() + "|" + cumulative.outputTokens();
+        }
+    }
+
+    private static final class IngestionResult {
+        int filesScanned;
+        int filesChanged;
+        int eventsInserted;
+        int eventsSkipped;
+        final List<IngestionError> errors = new ArrayList<>();
+
+        String toJson() {
+            return "{"
+                    + "\"status\":\"" + (errors.isEmpty() ? "ok" : "error") + "\","
+                    + "\"files_scanned\":" + filesScanned + ","
+                    + "\"files_changed\":" + filesChanged + ","
+                    + "\"events_inserted\":" + eventsInserted + ","
+                    + "\"events_skipped\":" + eventsSkipped + ","
+                    + "\"errors\":" + Json.array(errors, IngestionError::toJson)
+                    + "}";
+        }
+    }
+
+    private record IngestionError(String path, int line, String message) {
+        static IngestionError general(String path, String message) {
+            return new IngestionError(path, 0, message);
+        }
+
+        String toJson() {
+            return "{"
+                    + "\"path\":\"" + Json.escape(path) + "\","
+                    + "\"line\":" + line + ","
+                    + "\"message\":\"" + Json.escape(message) + "\""
+                    + "}";
         }
     }
 
@@ -1101,6 +1470,17 @@ public final class AgentTokenDashboardApp {
                     out.append(',');
                 }
                 out.append('"').append(escape(values.get(i))).append('"');
+            }
+            return out.append(']').toString();
+        }
+
+        static <T> String array(List<T> values, JsonMapper<T> mapper) {
+            StringBuilder out = new StringBuilder("[");
+            for (int i = 0; i < values.size(); i++) {
+                if (i > 0) {
+                    out.append(',');
+                }
+                out.append(mapper.map(values.get(i)));
             }
             return out.append(']').toString();
         }
