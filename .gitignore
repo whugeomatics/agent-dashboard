@@ -1,8 +1,17 @@
+target/
 # Compiled class file
 *.class
 
 # Log file
 *.log
+*.pid
+.idea/
+.DS_Store
+.project
+.classpath
+.settings/
+.apt_generated/
+.apt_generated_test/
 
 # BlueJ files
 *.ctxt

@@ -1,0 +1,293 @@
+# AGENTS.md
+
+本文件用于指导后续 agent 在本项目中的协作方式。它不是一次性规范，后续每完成一个阶段，都应把新的决策、踩坑和验收要求补回这里。
+
+## 1. 项目目标
+
+本项目最终目标是做一款本地模型使用统计与路由工具：
+
+- MVP 阶段先聚焦 Codex 使用统计 dashboard。
+- 中期加入本地 SQLite 持久化和增量采集。
+- 长期演进为本地模型网关，统一统计 Codex、Claude Code、Cursor、OpenAI SDK、自研脚本等工具的模型使用量。
+
+长期版本需要统计：
+
+- 每次会话 token 消耗。
+- 每个模型 token 消耗。
+- 每个模型使用时长。
+- 每天、每周、每月用量。
+- provider、tool、model 维度的使用排行。
+
+## 2. 当前阶段优先级
+
+所有 agent 必须先确认当前阶段，再开始工作。
+
+阶段顺序：
+
+1. 阶段 0：可行性调研。
+2. 阶段 1：Codex Dashboard MVP。
+3. 阶段 2：SQLite 持久化与增量采集。
+4. 阶段 3：OpenAI-compatible 本地模型网关。
+5. 阶段 4：多 provider 适配。
+6. 阶段 5：Codex、Claude Code、Cursor 等工具接入。
+7. 阶段 6：产品化。
+
+当前默认阶段：阶段 0 / 阶段 1 之间，当前工作聚焦 P1 Codex Dashboard MVP 的需求和规划。
+
+当前工作重点：
+
+- 先完善 P1 需求、Codex 日志调研计划、API contract、dashboard 信息架构、开发任务和验收文档。
+- 不优先继续扩展代码。
+- 不做 Claude Code、Cursor 的具体实现。
+- 不做本地网关实现。
+
+进入 P1 功能开发前，至少应补齐：
+
+- `docs/P1-2026-04-29-requirements.md`
+- `docs/P1-2026-04-29-planning-tasks.md`
+- `docs/research/P1-2026-04-29-codex-log-research.md`
+- `docs/contracts/P1-2026-04-29-report-api.md`
+- `docs/P1-2026-04-29-dashboard-ia.md`
+- `docs/milestones/P1-codex-dashboard/P1-2026-04-29-tasks.md`
+- `docs/acceptance/P1-2026-04-29-mvp-codex-dashboard.md`
+
+## 3. 工作原则
+
+### 3.1 先设计，再开发，再验收
+
+任何阶段都必须按这个顺序推进：
+
+1. 写设计文档。
+2. 写任务拆分。
+3. 开发实现。
+4. 做 review。
+5. 写验收报告。
+6. 把新约定更新回 `AGENTS.md` 或对应 docs。
+
+没有设计文档时，不应直接开发。
+
+### 3.2 阶段聚焦
+
+每个阶段只解决当前阶段的问题。
+
+例子：
+
+- 做 Codex MVP 时，不实现 Claude Code 适配。
+- 做日志统计时，不顺手实现本地网关。
+- 做 dashboard 时，不引入账户、登录、云同步。
+- 做 token 统计时，不默认存储 prompt 正文。
+
+如果发现后续阶段需要的能力，只记录到文档，不提前实现。
+
+### 3.3 文档是 agent 之间的接口
+
+多个 agent 协作时，不依赖聊天上下文传递关键约定。关键事实必须写入文档。
+
+优先读当前阶段的存留态文档：
+
+- `docs/P1-2026-04-29-README.md`
+- `docs/P1-2026-04-29-roadmap.md`
+- `docs/P1-2026-04-29-requirements.md`
+- `docs/P1-2026-04-29-planning-tasks.md`
+- `docs/research/P1-2026-04-29-codex-log-research.md`
+- `docs/contracts/P1-2026-04-29-report-api.md`
+- `docs/P1-2026-04-29-dashboard-ia.md`
+- `docs/milestones/P1-codex-dashboard/P1-2026-04-29-tasks.md`
+- `docs/acceptance/P1-2026-04-29-mvp-codex-dashboard.md`
+- `docs/P1-2026-04-29-mvp-codex-dashboard.md`
+- `docs/P1-2026-04-29-gateway-architecture.md`
+- `docs/P1-2026-04-29-agent-collaboration.md`
+- `docs/P1-2026-04-29-risks.md`
+
+所有阶段性文档必须使用以下命名格式：
+
+```text
+P<阶段号>-YYYY-MM-DD-<主题>.md
+```
+
+例子：
+
+- `P1-2026-04-29-roadmap.md`
+- `P2-2026-05-01-codex-log-research.md`
+- `P3-2026-05-08-openai-gateway-contract.md`
+
+`README` 也必须带阶段和日期。这样后续回看项目时，每个阶段的文档都是存留态快照，而不是被持续覆盖的当前态文件。
+
+新增阶段时，应使用以下结构：
+
+```text
+docs/milestones/<name>/design.md
+docs/milestones/<name>/tasks.md
+docs/milestones/<name>/review.md
+docs/milestones/<name>/acceptance.md
+```
+
+如果 milestone 文档需要长期保留，也应在文件名中加入阶段和日期，例如：
+
+```text
+docs/milestones/P2-codex-dashboard/P2-2026-05-01-design.md
+```
+
+## 4. Agent 分工
+
+### Planner Agent
+
+职责：
+
+- 拆阶段。
+- 定义边界。
+- 写设计文档。
+- 写验收标准。
+- 识别风险和未知点。
+
+不做：
+
+- 不直接写功能代码。
+- 不替 review agent 下最终结论。
+
+### Research Agent
+
+职责：
+
+- 调研 Codex、Claude Code、Cursor、provider API。
+- 验证工具是否支持 base URL、代理、日志读取。
+- 输出调研文档。
+
+产出位置：
+
+- `docs/research/*.md`
+
+### Backend Agent
+
+职责：
+
+- 实现日志解析。
+- 实现 API。
+- 实现 SQLite ingestion。
+- 实现本地模型网关。
+
+要求：
+
+- 开发前必须确认对应 contract 文档。
+- 改接口时必须同步更新 contract。
+- 不默认记录 prompt 或 response 正文。
+
+### Frontend Agent
+
+职责：
+
+- 实现 dashboard。
+- 展示 usage 统计。
+- 保证信息密度、可读性、基本响应式。
+
+要求：
+
+- 页面字段必须来自 API contract。
+- 不在前端重新定义统计口径。
+- 不做营销页，首页就是实际 dashboard。
+
+### Review Agent
+
+职责：
+
+- 检查 bug、统计口径、隐私风险、重复计数、边界条件。
+- 输出 review 文档。
+
+产出位置：
+
+- `docs/reviews/*.md`
+- 或 `docs/milestones/<name>/review.md`
+
+### Acceptance Agent
+
+职责：
+
+- 按验收标准跑检查。
+- 记录通过项、失败项、未验证项。
+
+产出位置：
+
+- `docs/acceptance/*.md`
+- 或 `docs/milestones/<name>/acceptance.md`
+
+## 5. MVP Codex Dashboard 规则
+
+MVP 只做 Codex 使用统计。
+
+允许：
+
+- 读取本机 Codex session JSONL 日志。
+- 聚合 token usage。
+- 展示今日、7 天、30 天、本月统计。
+- 展示按天、按模型、按会话统计。
+
+禁止：
+
+- 修改 `.codex` 下的文件。
+- 代理 Codex 请求。
+- 存储 prompt 正文。
+- 引入 Claude Code、Cursor 实现。
+- 做云同步或登录。
+
+统计口径：
+
+- 使用 `token_count` 事件里的 `payload.info.total_token_usage` 相邻累计快照 delta。
+- 相同累计快照视为重复快照，跳过。
+- 不直接累加 `last_token_usage`，因为实测会重复计数。
+- 模型名可从同 session 的 `turn_context.model` 推断。
+- MVP 中的使用时长是日志跨度估算，不是 API latency。
+
+## 6. 长期本地网关规则
+
+网关阶段开始前，必须先有 contract 文档：
+
+- `docs/contracts/openai-compatible.md`
+- `docs/contracts/usage-event.md`
+- `docs/contracts/provider-adapter.md`
+- `docs/contracts/database-schema.md`
+
+网关必须默认：
+
+- 绑定 `127.0.0.1`。
+- 本地存储 usage 数据。
+- 不记录 prompt 正文。
+- 不记录 response 正文。
+- 对失败请求也记录 status、耗时和错误类型。
+
+网关需要统计：
+
+- request latency。
+- first token latency。
+- stream duration。
+- input tokens。
+- cached input tokens。
+- output tokens。
+- reasoning output tokens。
+- total tokens。
+
+## 7. Review Checklist
+
+每次提交或阶段验收前至少检查：
+
+- 是否偏离当前阶段目标。
+- 是否新增了未要求的功能。
+- 是否把后续阶段问题提前实现了。
+- 是否可能重复统计 token。
+- 是否混淆增量 usage 和累计 usage。
+- 是否记录了敏感 prompt 或 response。
+- 是否更新了对应文档。
+- 是否有验收标准和验收结果。
+
+## 8. 变更本文件的规则
+
+当出现以下情况时，应更新本文件：
+
+- 阶段边界发生变化。
+- 统计口径发生变化。
+- 新增 agent 角色或协作方式。
+- 发现重要风险。
+- 某个工具接入方式被确认或否定。
+- 验收过程发现必须长期遵守的规则。
+- 文档命名、归档或阶段编号规则发生变化。
+
+更新时只改和当前发现直接相关的部分，不做大范围重写。
