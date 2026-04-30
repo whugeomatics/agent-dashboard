@@ -1,5 +1,7 @@
 # Agent Dashboard
 
+![what](images/P1-2026-04-30-what.png)
+
 **English** | [中文](README.zh-CN.md)
 
 Agent Dashboard is a local model usage dashboard and future routing tool. The project starts with Codex usage analytics, then evolves toward SQLite-backed incremental collection and, later, a local OpenAI-compatible model gateway.

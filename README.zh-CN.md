@@ -1,5 +1,7 @@
 # Agent Dashboard
 
+![what](images/P1-2026-04-30-what.png)
+
 [English](README.md) | **中文**
 
 Agent Dashboard 是一个本地模型使用统计 dashboard，并会逐步演进成本地模型路由工具。项目先从 Codex 使用统计开始，再进入 SQLite 增量采集，后续扩展到本地 OpenAI-compatible 模型网关。
