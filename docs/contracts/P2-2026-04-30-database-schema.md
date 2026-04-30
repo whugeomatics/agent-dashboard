@@ -20,6 +20,26 @@ AGENT_DASHBOARD_DB
 
 P2 不写入 `%USERPROFILE%\.codex`。
 
+## SQL 管理
+
+P2 起，SQLite DDL 和 DML 必须集中在 SQL 文件中：
+
+```text
+src/main/resources/db/schema-v1.sql
+```
+
+Java 代码通过 JDBC 执行该文件中的命名 SQL 语句，不得在 repository 之外内联 SQL。后续 schema 变更应新增版本化 SQL 文件，例如：
+
+```text
+src/main/resources/db/schema-v2.sql
+```
+
+SQLite 连接统一使用 `org.xerial:sqlite-jdbc`：
+
+```text
+jdbc:sqlite:<db-path>
+```
+
 ## 表：schema_migrations
 
 用途：记录 schema 版本。

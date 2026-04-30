@@ -88,3 +88,23 @@ powershell -ExecutionPolicy Bypass -File scripts\P2-2026-04-30-smoke-test.ps1
 
 - Maven：`BUILD SUCCESS`。
 - P2 smoke test：`P2 smoke test passed`。
+
+## 后续架构修正
+
+P2 验收后发现原实现存在维护性问题：前端 HTML、HTTP、ingestion、SQLite、report aggregation 曾集中在单个 Java 类中，且 SQL 曾以内联字符串存在于 Java 代码中。
+
+已补充架构 cleanup 要求：
+
+- 前端静态资源放入 `src/main/resources/static/`。
+- SQL 集中放入 `src/main/resources/db/schema-v1.sql`。
+- SQLite 访问统一使用 `org.xerial:sqlite-jdbc` 和 JDBC API。
+- Java 按入口、配置、HTTP、ingestion、repository、report、domain、utility 拆分。
+
+cleanup 的详细记录见：
+
+- `docs/milestones/P2-codex-sqlite/P2-2026-04-30-architecture-cleanup.md`
+
+cleanup 复验结果：
+
+- `mvn -DskipTests clean package`: `BUILD SUCCESS`。
+- `powershell -ExecutionPolicy Bypass -File scripts\P2-2026-04-30-smoke-test.ps1`: `P2 smoke test passed`。

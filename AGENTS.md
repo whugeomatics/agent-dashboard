@@ -148,6 +148,8 @@ P3 不能只以“服务能启动”为完成标准。验收至少覆盖：
 P2 长期保留约定：
 
 - SQLite 默认路径为 `%USERPROFILE%\.agent-dashboard\agent-dashboard.sqlite`，可由 `AGENT_DASHBOARD_DB` 覆盖。
+- SQLite 访问统一使用 `org.xerial:sqlite-jdbc` 和 JDBC API；业务层不得直接创建数据库连接。
+- 所有 SQLite DDL/DML 必须集中在 `src/main/resources/db/*.sql`，Java 代码只读取命名 SQL 并执行，不内联建表或查询 SQL。
 - P2 ingestion 通过 CLI `--ingest` 触发。
 - usage event 持久化 delta，不持久化 cumulative snapshot。
 - changed source file 从头重放并依赖 `event_key` 去重，避免缺少上一条 cumulative snapshot 时错算 delta。
@@ -176,7 +178,19 @@ P2 长期保留约定：
 
 每个阶段只解决当前阶段的问题。如果发现后续阶段需要的能力，只记录到文档，不提前实现。
 
-### 7.3 文档是 agent 之间的接口
+### 7.3 代码结构边界
+
+前后端必须保持文件级拆分：
+
+- 前端静态页面和脚本放在 `src/main/resources/static/`。
+- HTTP/API 层只处理路由、参数、状态码和 response。
+- ingestion 层只处理日志读取和 usage event 生成。
+- repository 层只处理 JDBC、SQL 执行和数据库映射。
+- report 层只处理统计聚合和 contract 输出。
+
+禁止把入口、前端 HTML、SQL、HTTP handler、ingestion 和 report 聚合长期堆在一个 Java 类里。
+
+### 7.4 文档是 agent 之间的接口
 
 多个 agent 协作时，不依赖聊天上下文传递关键约定。关键事实必须写入文档。
 
@@ -188,7 +202,7 @@ P<阶段号>-YYYY-MM-DD-<主题>.md
 
 `README` 必须带阶段和日期归档；阶段结束后的 `AGENTS` 最终版必须进入 `docs/archive/`。
 
-### 7.4 Review Checklist
+### 7.5 Review Checklist
 
 每次提交或阶段验收前至少检查：
 
@@ -198,6 +212,8 @@ P<阶段号>-YYYY-MM-DD-<主题>.md
 - 是否可能重复统计 token。
 - 是否混淆增量 usage 和累计 usage。
 - 是否记录了敏感 prompt 或 response。
+- 是否把 SQL 内联进 Java 代码。
+- 是否把前端页面重新塞回 Java 字符串。
 - 是否更新了对应文档。
 - 是否有验收标准和验收结果。
 

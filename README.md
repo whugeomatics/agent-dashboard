@@ -67,6 +67,7 @@ Completed P2:
 - [P2 Design](docs/milestones/P2-codex-sqlite/P2-2026-04-30-design.md)
 - [P2 Tasks](docs/milestones/P2-codex-sqlite/P2-2026-04-30-tasks.md)
 - [P2 Implementation Plan](docs/milestones/P2-codex-sqlite/P2-2026-04-30-implementation-plan.md)
+- [P2 Architecture Cleanup](docs/milestones/P2-codex-sqlite/P2-2026-04-30-architecture-cleanup.md)
 - [P2 Review](docs/reviews/P2-2026-04-30-codex-sqlite-review.md)
 - [P2 Acceptance](docs/acceptance/P2-2026-04-30-codex-sqlite.md)
 
