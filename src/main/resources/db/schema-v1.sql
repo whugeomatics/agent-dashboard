@@ -53,8 +53,108 @@ CREATE INDEX IF NOT EXISTS idx_usage_events_session ON usage_events(session_id);
 -- name: create_idx_usage_events_timestamp
 CREATE INDEX IF NOT EXISTS idx_usage_events_timestamp ON usage_events(event_timestamp);
 
+-- name: create_device_tokens
+CREATE TABLE IF NOT EXISTS device_tokens (
+  token_hash TEXT PRIMARY KEY,
+  team_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  device_id TEXT NOT NULL,
+  display_name TEXT,
+  status TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  last_seen_at TEXT
+);
+
+-- name: alter_device_tokens_add_token_secret
+ALTER TABLE device_tokens ADD COLUMN token_secret TEXT;
+
+-- name: create_team_usage_events
+CREATE TABLE IF NOT EXISTS team_usage_events (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  team_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  device_id TEXT NOT NULL,
+  event_key TEXT NOT NULL,
+  tool TEXT NOT NULL,
+  session_id TEXT NOT NULL,
+  model TEXT NOT NULL,
+  event_timestamp TEXT NOT NULL,
+  local_date TEXT NOT NULL,
+  input_tokens INTEGER NOT NULL,
+  cached_input_tokens INTEGER NOT NULL,
+  output_tokens INTEGER NOT NULL,
+  reasoning_output_tokens INTEGER NOT NULL,
+  total_tokens INTEGER NOT NULL,
+  received_at TEXT NOT NULL,
+  UNIQUE(team_id, user_id, device_id, event_key)
+);
+
+-- name: create_idx_team_usage_events_local_date
+CREATE INDEX IF NOT EXISTS idx_team_usage_events_local_date ON team_usage_events(local_date);
+
+-- name: create_idx_team_usage_events_user
+CREATE INDEX IF NOT EXISTS idx_team_usage_events_user ON team_usage_events(team_id, user_id);
+
+-- name: create_idx_team_usage_events_device
+CREATE INDEX IF NOT EXISTS idx_team_usage_events_device ON team_usage_events(team_id, device_id);
+
+-- name: create_idx_team_usage_events_model
+CREATE INDEX IF NOT EXISTS idx_team_usage_events_model ON team_usage_events(model);
+
 -- name: insert_schema_migration
 INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES (1, ?);
+
+-- name: upsert_device_token
+INSERT INTO device_tokens(token_hash, token_secret, team_id, user_id, device_id, display_name, status, created_at, last_seen_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL)
+ON CONFLICT(token_hash) DO UPDATE SET
+  token_secret = excluded.token_secret,
+  team_id = excluded.team_id,
+  user_id = excluded.user_id,
+  device_id = excluded.device_id,
+  display_name = excluded.display_name,
+  status = excluded.status;
+
+-- name: find_device_token
+SELECT team_id, user_id, device_id, display_name, status
+FROM device_tokens
+WHERE token_hash = ?;
+
+-- name: list_device_tokens
+SELECT rowid AS token_id, token_secret, team_id, user_id, device_id, display_name, status, created_at, last_seen_at
+FROM device_tokens
+ORDER BY team_id, user_id, device_id, created_at;
+
+-- name: get_device_token_secret
+SELECT token_secret
+FROM device_tokens
+WHERE rowid = ?;
+
+-- name: delete_device_token
+DELETE FROM device_tokens
+WHERE rowid = ?;
+
+-- name: find_device_binding
+SELECT team_id, user_id, device_id, display_name, status
+FROM device_tokens
+WHERE team_id = ? AND user_id = ? AND device_id = ?;
+
+-- name: update_device_token_seen
+UPDATE device_tokens SET last_seen_at = ? WHERE token_hash = ?;
+
+-- name: insert_team_usage_event
+INSERT OR IGNORE INTO team_usage_events(team_id, user_id, device_id, event_key, tool, session_id, model,
+  event_timestamp, local_date, input_tokens, cached_input_tokens, output_tokens,
+  reasoning_output_tokens, total_tokens, received_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+-- name: load_team_usage_events
+SELECT e.team_id, e.user_id, e.device_id, d.display_name, e.tool, e.session_id, e.model, e.event_timestamp,
+  e.input_tokens, e.cached_input_tokens, e.output_tokens, e.reasoning_output_tokens, e.total_tokens
+FROM team_usage_events e
+LEFT JOIN device_tokens d ON d.team_id = e.team_id AND d.user_id = e.user_id AND d.device_id = e.device_id
+WHERE e.local_date >= ? AND e.local_date <= ?
+ORDER BY e.event_timestamp, e.id;
 
 -- name: find_source_file
 SELECT id, size_bytes, modified_at, file_fingerprint
@@ -83,6 +183,13 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 
 -- name: load_usage_events
 SELECT session_id, model, event_timestamp, input_tokens, cached_input_tokens, output_tokens,
+  reasoning_output_tokens, total_tokens
+FROM usage_events
+WHERE local_date >= ? AND local_date <= ?
+ORDER BY event_timestamp, id;
+
+-- name: load_export_usage_events
+SELECT event_key, session_id, model, event_timestamp, input_tokens, cached_input_tokens, output_tokens,
   reasoning_output_tokens, total_tokens
 FROM usage_events
 WHERE local_date >= ? AND local_date <= ?

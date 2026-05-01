@@ -36,7 +36,7 @@
                 <configuration>
                     <archive>
                         <manifest>
-                            <mainClass>local.agent.dashboard.AgentTokenDashboardApp</mainClass>
+                            <mainClass>local.agent.dashboard.app.AgentTokenDashboardApp</mainClass>
                         </manifest>
                     </archive>
                 </configuration>
@@ -55,7 +55,7 @@
                             <createDependencyReducedPom>false</createDependencyReducedPom>
                             <transformers>
                                 <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
-                                    <mainClass>local.agent.dashboard.AgentTokenDashboardApp</mainClass>
+                                    <mainClass>local.agent.dashboard.app.AgentTokenDashboardApp</mainClass>
                                 </transformer>
                             </transformers>
                         </configuration>
