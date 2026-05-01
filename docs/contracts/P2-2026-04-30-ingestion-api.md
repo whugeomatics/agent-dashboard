@@ -66,10 +66,16 @@ P2 暂不要求新增公开 ingestion HTTP API。
 1. 扫描 `CODEX_SESSIONS_DIR` 下的 `.jsonl` 文件。
 2. 在 `source_files` 中查找文件 checkpoint。
 3. 如果文件未见过，从第 1 行开始读。
-4. 如果文件已见过且 `size_bytes` 未变小，从 `last_line + 1` 继续读。
-5. 如果文件变小或 fingerprint 明显变化，视为文件替换，重新扫描该文件，但依赖 `usage_events.event_key` 防止重复写入。
+4. 如果文件已见过且 `size_bytes`、`modified_at`、`file_fingerprint` 均未变化，跳过该文件。
+5. 如果文件新增、变大、变小或 fingerprint 明显变化，视为 changed source file，重新读取该文件并依赖 `usage_events.event_key` 防止重复写入。
 6. 每成功处理一行，更新内存 checkpoint。
 7. 文件处理成功后，更新 `source_files.last_line`、`size_bytes`、`modified_at`、`scanned_at`。
+
+说明：
+
+- P2 的 token delta 依赖同一 session 内上一条 cumulative snapshot。
+- 当前 schema 不持久化上一条 cumulative snapshot，因此 changed source file 必须从头重放，才能避免只读 `last_line + 1` 时把第一条新增 snapshot 错算为全量 delta。
+- P2 仍然只处理 changed source files；未变化文件不重读。
 
 ## Delta 规则
 

@@ -35,78 +35,68 @@
 
 ## 2. 当前阶段
 
-当前阶段：P2 实现准备完成，下一步进入 P2 功能开发。
+当前阶段：P3 设计准备。
 
-P1 Codex Dashboard MVP 已通过验收。P2 文档基线已建立。下一步只聚焦 P2：SQLite 持久化与增量采集的后端实现。
+P1 和 P2 已通过验收。下一步只聚焦 P3：OpenAI-compatible 本地模型网关的设计、contract、任务拆分和验收标准。P3 仍然遵守“先设计、再开发、文档落地”的方针；在 P3 设计和 contract 补齐前，不应直接实现网关代码。
 
 当前阶段目标：
 
-1. 实现 SQLite schema 初始化。
-2. 实现 `--ingest` CLI。
-3. 实现 source file checkpoint。
-4. 实现 usage delta 去重写入。
-5. 保持 `/api/report` 与 P1 contract 兼容。
+1. 明确本地网关的最小 MVP 边界。
+2. 设计 OpenAI-compatible endpoint contract。
+3. 设计 provider adapter contract。
+4. 设计 usage event contract，复用 P2 SQLite 统计能力。
+5. 明确流式响应、错误记录、token usage 记录和隐私边界。
+6. 拆分 P3 开发任务和验收标准。
 
 当前阶段禁止：
 
-- 不实现 Claude Code。
-- 不实现 Cursor。
-- 不实现本地模型网关。
-- 不引入 provider adapter。
+- 不直接实现网关代码，直到 P3 设计、contract、tasks、acceptance 文档补齐。
+- 不接入 Claude Code、Cursor。
+- 不实现多 provider 自动路由。
+- 不引入登录、云同步、计费系统。
 - 不记录 prompt 正文。
 - 不记录 response 正文。
-- 不改变 P1 已验证的 `total_token_usage` delta 统计口径，除非先写明设计变更和验收标准。
+- 不破坏 P1/P2 `/api/report` contract。
 
 ## 3. 当前阶段必读文档
 
-P2 开始前，后续 agent 至少应先读：
+P3 设计前，后续 agent 至少应先读：
 
+- `docs/archive/P1-2026-04-29-AGENTS.md`
+- `docs/archive/P2-2026-04-30-AGENTS.md`
 - `docs/P2-2026-04-30-README.md`
-- `docs/P2-2026-04-30-AGENTS.md`
 - `docs/contracts/P2-2026-04-30-database-schema.md`
 - `docs/contracts/P2-2026-04-30-ingestion-api.md`
 - `docs/milestones/P2-codex-sqlite/P2-2026-04-30-design.md`
-- `docs/milestones/P2-codex-sqlite/P2-2026-04-30-tasks.md`
+- `docs/milestones/P2-codex-sqlite/P2-2026-04-30-implementation-plan.md`
+- `docs/reviews/P2-2026-04-30-codex-sqlite-review.md`
 - `docs/acceptance/P2-2026-04-30-codex-sqlite.md`
-- `docs/P1-2026-04-29-README.md`
-- `docs/P1-2026-04-29-requirements.md`
-- `docs/research/P1-2026-04-29-codex-log-research.md`
 - `docs/contracts/P1-2026-04-29-report-api.md`
-- `docs/milestones/P1-codex-dashboard/P1-2026-04-29-backend-prototype.md`
-- `docs/acceptance/P1-2026-04-29-mvp-codex-dashboard.md`
-- `docs/reviews/P1-2026-04-30-codex-dashboard-review.md`
+- `docs/research/P1-2026-04-29-codex-log-research.md`
 
-## 4. P2 文档基线
+## 4. P3 文档待办
 
-P2 功能开发前置文档已补齐：
+P3 开发前必须先补齐：
 
-- `docs/P2-2026-04-30-README.md`
-- `docs/contracts/P2-2026-04-30-database-schema.md`
-- `docs/contracts/P2-2026-04-30-ingestion-api.md`
-- `docs/milestones/P2-codex-sqlite/P2-2026-04-30-design.md`
-- `docs/milestones/P2-codex-sqlite/P2-2026-04-30-tasks.md`
-- `docs/acceptance/P2-2026-04-30-codex-sqlite.md`
+- `docs/P3-2026-04-30-README.md`
+- `docs/contracts/P3-2026-04-30-openai-compatible-gateway.md`
+- `docs/contracts/P3-2026-04-30-provider-adapter.md`
+- `docs/contracts/P3-2026-04-30-usage-event.md`
+- `docs/milestones/P3-local-gateway/P3-2026-04-30-design.md`
+- `docs/milestones/P3-local-gateway/P3-2026-04-30-tasks.md`
+- `docs/acceptance/P3-2026-04-30-local-gateway.md`
 
-P2 实现必须遵守：
+## 5. P3 验收门槛
 
-- SQLite 默认路径为 `%USERPROFILE%\.agent-dashboard\agent-dashboard.sqlite`，可由 `AGENT_DASHBOARD_DB` 覆盖。
-- ingestion 通过 CLI `--ingest` 触发，P2 暂不新增公开 ingestion HTTP API。
-- 持久化 delta event，不持久化 cumulative snapshot。
-- 使用 `usage_events.event_key` 去重。
-- 继续兼容 P1 `/api/report`。
+P3 不能只以“服务能启动”为完成标准。验收至少覆盖：
+
+- 网关默认只绑定 `127.0.0.1`。
+- OpenAI-compatible chat completions 非流式请求可代理并返回兼容响应。
+- 如实现 streaming，必须保持 SSE chunk 兼容并记录 stream duration。
+- usage event 写入 SQLite，且能被 `/api/report` 聚合。
+- 失败请求记录 status、耗时和错误类型。
 - 不存 prompt/response 正文。
-
-## 5. P2 验收门槛
-
-P2 不能只以“代码能跑”为完成标准。验收至少覆盖：
-
-- 首次导入真实 Codex JSONL。
-- 二次导入不重复计数。
-- 新增日志后只增量导入。
-- SQLite schema 与 contract 一致。
-- `/api/report` 与 P1 contract 兼容，或文档明确记录变更。
-- 不写 `.codex`。
-- 不存 prompt/response 正文。
+- 不破坏 P2 ingestion。
 - 构建通过。
 - smoke test 或等价端到端验证通过。
 - review 和 acceptance 文档已更新。
@@ -128,26 +118,43 @@ P2 不能只以“代码能跑”为完成标准。验收至少覆盖：
 - `docs/P1-2026-04-29-README.md`
 - `docs/P1-2026-04-29-roadmap.md`
 - `docs/P1-2026-04-29-requirements.md`
-- `docs/P1-2026-04-29-planning-tasks.md`
-- `docs/P1-2026-04-29-dashboard-ia.md`
-- `docs/P1-2026-04-29-mvp-codex-dashboard.md`
-- `docs/P1-2026-04-29-agent-collaboration.md`
-- `docs/P1-2026-04-29-risks.md`
 - `docs/research/P1-2026-04-29-codex-log-research.md`
 - `docs/contracts/P1-2026-04-29-report-api.md`
-- `docs/milestones/P1-codex-dashboard/P1-2026-04-29-tasks.md`
 - `docs/milestones/P1-codex-dashboard/P1-2026-04-29-backend-prototype.md`
-- `docs/milestones/P1-codex-dashboard/P1-2026-04-30-plan-a-execution.md`
 - `docs/reviews/P1-2026-04-30-codex-dashboard-review.md`
 - `docs/acceptance/P1-2026-04-29-mvp-codex-dashboard.md`
 
-P1 长期保留约定：
+### P2：SQLite 持久化与增量采集
 
-- Codex MVP 统计口径使用 `token_count` 事件里的 `payload.info.total_token_usage` 相邻累计快照 delta。
-- 相同累计快照视为重复快照，跳过。
-- 不直接累加 `last_token_usage`。
-- 模型名可从同 session 的 `turn_context.model` 推断。
-- MVP 使用时长是日志跨度估算，不是 API latency。
+状态：通过。
+
+验证记录：
+
+- Maven package：用户真实终端执行 `mvn -DskipTests clean package`，结果 `BUILD SUCCESS`。
+- smoke test：用户真实终端执行 `powershell -ExecutionPolicy Bypass -File scripts\P2-2026-04-30-smoke-test.ps1`，结果 `P2 smoke test passed`。
+
+文档索引：
+
+- `docs/archive/P2-2026-04-30-AGENTS.md`
+- `docs/P2-2026-04-30-README.md`
+- `docs/contracts/P2-2026-04-30-database-schema.md`
+- `docs/contracts/P2-2026-04-30-ingestion-api.md`
+- `docs/milestones/P2-codex-sqlite/P2-2026-04-30-design.md`
+- `docs/milestones/P2-codex-sqlite/P2-2026-04-30-tasks.md`
+- `docs/milestones/P2-codex-sqlite/P2-2026-04-30-implementation-plan.md`
+- `docs/reviews/P2-2026-04-30-codex-sqlite-review.md`
+- `docs/acceptance/P2-2026-04-30-codex-sqlite.md`
+
+P2 长期保留约定：
+
+- SQLite 默认路径为 `%USERPROFILE%\.agent-dashboard\agent-dashboard.sqlite`，可由 `AGENT_DASHBOARD_DB` 覆盖。
+- SQLite 访问统一使用 `org.xerial:sqlite-jdbc` 和 JDBC API；业务层不得直接创建数据库连接。
+- 所有 SQLite DDL/DML 必须集中在 `src/main/resources/db/*.sql`，Java 代码只读取命名 SQL 并执行，不内联建表或查询 SQL。
+- P2 ingestion 通过 CLI `--ingest` 触发。
+- usage event 持久化 delta，不持久化 cumulative snapshot。
+- changed source file 从头重放并依赖 `event_key` 去重，避免缺少上一条 cumulative snapshot 时错算 delta。
+- 不存 prompt/response 正文。
+- `/api/report` contract 继续兼容 P1。
 
 ## 7. 通用工作原则
 
@@ -169,11 +176,21 @@ P1 长期保留约定：
 
 ### 7.2 阶段聚焦
 
-每个阶段只解决当前阶段的问题。
+每个阶段只解决当前阶段的问题。如果发现后续阶段需要的能力，只记录到文档，不提前实现。
 
-如果发现后续阶段需要的能力，只记录到文档，不提前实现。
+### 7.3 代码结构边界
 
-### 7.3 文档是 agent 之间的接口
+前后端必须保持文件级拆分：
+
+- 前端静态页面和脚本放在 `src/main/resources/static/`。
+- HTTP/API 层只处理路由、参数、状态码和 response。
+- ingestion 层只处理日志读取和 usage event 生成。
+- repository 层只处理 JDBC、SQL 执行和数据库映射。
+- report 层只处理统计聚合和 contract 输出。
+
+禁止把入口、前端 HTML、SQL、HTTP handler、ingestion 和 report 聚合长期堆在一个 Java 类里。
+
+### 7.4 文档是 agent 之间的接口
 
 多个 agent 协作时，不依赖聊天上下文传递关键约定。关键事实必须写入文档。
 
@@ -183,18 +200,9 @@ P1 长期保留约定：
 P<阶段号>-YYYY-MM-DD-<主题>.md
 ```
 
-例子：
+`README` 必须带阶段和日期归档；阶段结束后的 `AGENTS` 最终版必须进入 `docs/archive/`。
 
-- `P1-2026-04-29-roadmap.md`
-- `P2-2026-04-30-database-schema.md`
-- `P3-2026-05-08-openai-gateway-contract.md`
-
-`README` 必须带阶段和日期归档；阶段结束后的 `AGENTS` 最终版必须进入 `docs/archive/`，例如：
-
-- `docs/P1-2026-04-29-README.md`
-- `docs/archive/P1-2026-04-29-AGENTS.md`
-
-### 7.4 Review Checklist
+### 7.5 Review Checklist
 
 每次提交或阶段验收前至少检查：
 
@@ -204,6 +212,8 @@ P<阶段号>-YYYY-MM-DD-<主题>.md
 - 是否可能重复统计 token。
 - 是否混淆增量 usage 和累计 usage。
 - 是否记录了敏感 prompt 或 response。
+- 是否把 SQL 内联进 Java 代码。
+- 是否把前端页面重新塞回 Java 字符串。
 - 是否更新了对应文档。
 - 是否有验收标准和验收结果。
 

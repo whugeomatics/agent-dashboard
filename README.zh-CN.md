@@ -8,15 +8,23 @@ Agent Dashboard 是一个本地模型使用统计 dashboard，并会逐步演进
 
 ## 当前状态
 
-当前阶段：**P2 - SQLite 持久化与增量采集**。
+当前阶段：**P3 - OpenAI-compatible 本地网关设计准备**。
 
-P1 Codex Dashboard MVP 已通过验收：
+P1 和 P2 均已通过验收。
+
+P1 Codex Dashboard MVP：
 
 - Maven package 已在用户真实 Windows 终端通过。
 - P1 smoke test 已通过，输出 `P1 smoke test passed`。
 - Dashboard 可以读取 Codex usage metadata，并提供 `/api/report`。
 
-P2 文档基线已完成。下一步实现 SQLite schema 初始化、`--ingest` CLI、checkpoint、usage event 去重写入，并保持 `/api/report` 与 P1 contract 兼容。
+P2 SQLite 持久化与增量采集：
+
+- Maven package 已在用户真实 Windows 终端通过。
+- P2 smoke test 已通过，输出 `P2 smoke test passed`。
+- `--ingest` 可以把 Codex usage delta 写入本地 SQLite，`/api/report` 从 SQLite 聚合。
+
+下一步进入 P3 设计文档：OpenAI-compatible gateway contract、provider adapter contract、usage event contract、任务拆分和验收标准。
 
 ## 阶段成果
 
@@ -48,12 +56,19 @@ P1 和 P2 只聚焦 Codex。
 
 当前阶段：
 
+- [当前 AGENTS.md](AGENTS.md)
+
+已完成的 P2：
+
 - [P2 README](docs/P2-2026-04-30-README.md)
-- [P2 AGENTS](docs/P2-2026-04-30-AGENTS.md)
+- [P2 AGENTS 归档](docs/archive/P2-2026-04-30-AGENTS.md)
 - [P2 Database Schema Contract](docs/contracts/P2-2026-04-30-database-schema.md)
 - [P2 Ingestion Contract](docs/contracts/P2-2026-04-30-ingestion-api.md)
 - [P2 Design](docs/milestones/P2-codex-sqlite/P2-2026-04-30-design.md)
 - [P2 Tasks](docs/milestones/P2-codex-sqlite/P2-2026-04-30-tasks.md)
+- [P2 Implementation Plan](docs/milestones/P2-codex-sqlite/P2-2026-04-30-implementation-plan.md)
+- [P2 Architecture Cleanup](docs/milestones/P2-codex-sqlite/P2-2026-04-30-architecture-cleanup.md)
+- [P2 Review](docs/reviews/P2-2026-04-30-codex-sqlite-review.md)
 - [P2 Acceptance](docs/acceptance/P2-2026-04-30-codex-sqlite.md)
 
 已完成的 P1：
@@ -71,6 +86,7 @@ Agent 工作规则：
 
 - [当前 AGENTS.md](AGENTS.md)
 - [P1 AGENTS 归档](docs/archive/P1-2026-04-29-AGENTS.md)
+- [P2 AGENTS 归档](docs/archive/P2-2026-04-30-AGENTS.md)
 
 ## 构建
 
