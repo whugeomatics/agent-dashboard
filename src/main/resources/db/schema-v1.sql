@@ -89,6 +89,22 @@ CREATE TABLE IF NOT EXISTS team_usage_events (
   UNIQUE(team_id, user_id, device_id, event_key)
 );
 
+-- name: create_team_uploads
+CREATE TABLE IF NOT EXISTS team_uploads (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  team_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  device_id TEXT NOT NULL,
+  upload_date TEXT NOT NULL,
+  upload_time TEXT NOT NULL,
+  event_count INTEGER NOT NULL,
+  accepted INTEGER NOT NULL,
+  duplicate INTEGER NOT NULL,
+  rejected INTEGER NOT NULL,
+  status TEXT NOT NULL,
+  message TEXT
+);
+
 -- name: create_idx_team_usage_events_local_date
 CREATE INDEX IF NOT EXISTS idx_team_usage_events_local_date ON team_usage_events(local_date);
 
@@ -100,6 +116,12 @@ CREATE INDEX IF NOT EXISTS idx_team_usage_events_device ON team_usage_events(tea
 
 -- name: create_idx_team_usage_events_model
 CREATE INDEX IF NOT EXISTS idx_team_usage_events_model ON team_usage_events(model);
+
+-- name: create_idx_team_uploads_date
+CREATE INDEX IF NOT EXISTS idx_team_uploads_date ON team_uploads(upload_date);
+
+-- name: create_idx_team_uploads_team_user
+CREATE INDEX IF NOT EXISTS idx_team_uploads_team_user ON team_uploads(team_id, user_id);
 
 -- name: insert_schema_migration
 INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES (1, ?);
@@ -142,6 +164,11 @@ WHERE team_id = ? AND user_id = ? AND device_id = ?;
 -- name: update_device_token_seen
 UPDATE device_tokens SET last_seen_at = ? WHERE token_hash = ?;
 
+-- name: insert_team_upload
+INSERT INTO team_uploads(team_id, user_id, device_id, upload_date, upload_time, event_count,
+  accepted, duplicate, rejected, status, message)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+
 -- name: insert_team_usage_event
 INSERT OR IGNORE INTO team_usage_events(team_id, user_id, device_id, event_key, tool, session_id, model,
   event_timestamp, local_date, input_tokens, cached_input_tokens, output_tokens,
@@ -155,6 +182,20 @@ FROM team_usage_events e
 LEFT JOIN device_tokens d ON d.team_id = e.team_id AND d.user_id = e.user_id AND d.device_id = e.device_id
 WHERE e.local_date >= ? AND e.local_date <= ?
 ORDER BY e.event_timestamp, e.id;
+
+-- name: load_team_usage_events_plain
+SELECT e.team_id, e.user_id, e.device_id, NULL AS display_name, e.tool, e.session_id, e.model, e.event_timestamp,
+  e.input_tokens, e.cached_input_tokens, e.output_tokens, e.reasoning_output_tokens, e.total_tokens
+FROM team_usage_events e
+WHERE e.local_date >= ? AND e.local_date <= ?
+ORDER BY e.event_timestamp, e.id;
+
+-- name: load_team_uploads
+SELECT team_id, user_id, device_id, upload_date, upload_time, event_count, accepted, duplicate, rejected, status, message
+FROM team_uploads
+WHERE upload_date >= ? AND upload_date <= ?
+ORDER BY upload_time DESC, id DESC
+LIMIT 200;
 
 -- name: find_source_file
 SELECT id, size_bytes, modified_at, file_fingerprint

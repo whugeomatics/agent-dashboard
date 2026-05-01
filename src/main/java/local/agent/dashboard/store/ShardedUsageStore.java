@@ -13,6 +13,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.YearMonth;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -63,30 +64,34 @@ public final class ShardedUsageStore implements UsageStore {
 
     public List<UsageEvent> loadEvents(LocalDate startDate, LocalDate endDate) throws SQLException {
         List<UsageEvent> events = new ArrayList<>();
-        YearMonth month = YearMonth.from(startDate);
-        YearMonth endMonth = YearMonth.from(endDate);
-        while (!month.isAfter(endMonth)) {
-            Path path = dbPath(month);
-            if (Files.isRegularFile(path)) {
-                events.addAll(store(month).loadEvents(startDate, endDate));
-            }
-            month = month.plusMonths(1);
+        for (YearMonth shard : existingShards()) {
+            events.addAll(store(shard).loadEvents(startDate, endDate));
         }
         return events;
     }
 
     public List<ExportedUsageEvent> loadExportEvents(LocalDate startDate, LocalDate endDate) throws SQLException {
         List<ExportedUsageEvent> events = new ArrayList<>();
-        YearMonth month = YearMonth.from(startDate);
-        YearMonth endMonth = YearMonth.from(endDate);
-        while (!month.isAfter(endMonth)) {
-            Path path = dbPath(month);
-            if (Files.isRegularFile(path)) {
-                events.addAll(store(month).loadExportEvents(startDate, endDate));
-            }
-            month = month.plusMonths(1);
+        for (YearMonth shard : existingShards()) {
+            events.addAll(store(shard).loadExportEvents(startDate, endDate));
         }
         return events;
+    }
+
+    private List<YearMonth> existingShards() throws SQLException {
+        if (!Files.isDirectory(rootDir)) {
+            return List.of();
+        }
+        try (var stream = Files.list(rootDir)) {
+            return stream
+                    .filter(Files::isRegularFile)
+                    .map(path -> shardFromDbFileName(path.getFileName().toString()))
+                    .filter(month -> month != null)
+                    .sorted(Comparator.naturalOrder())
+                    .toList();
+        } catch (Exception e) {
+            throw new SQLException("list usage shards failed", e);
+        }
     }
 
     private SqliteUsageStore store(YearMonth shard) throws SQLException {
@@ -130,6 +135,20 @@ public final class ShardedUsageStore implements UsageStore {
             }
         }
         return null;
+    }
+
+    private static YearMonth shardFromDbFileName(String fileName) {
+        String prefix = "agent-dashboard-";
+        String suffix = ".sqlite";
+        if (!fileName.startsWith(prefix) || !fileName.endsWith(suffix)) {
+            return null;
+        }
+        String value = fileName.substring(prefix.length(), fileName.length() - suffix.length());
+        try {
+            return YearMonth.parse(value);
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     private static long encodeId(YearMonth shard, long localId) {

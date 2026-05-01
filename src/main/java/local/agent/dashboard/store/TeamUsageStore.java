@@ -3,6 +3,7 @@ package local.agent.dashboard.store;
 import local.agent.dashboard.domain.DeviceTokenBinding;
 import local.agent.dashboard.domain.DeviceTokenRecord;
 import local.agent.dashboard.domain.StoredTeamUsageEvent;
+import local.agent.dashboard.domain.TeamUploadRecord;
 import local.agent.dashboard.domain.TeamUsageEvent;
 
 import java.sql.SQLException;
@@ -26,7 +27,11 @@ public interface TeamUsageStore {
 
     void updateDeviceTokenSeen(String token) throws SQLException;
 
+    void insertTeamUpload(TeamUploadRecord upload) throws SQLException;
+
     boolean insertTeamUsageEvent(DeviceTokenBinding binding, TeamUsageEvent event) throws SQLException;
 
     List<StoredTeamUsageEvent> loadTeamEvents(LocalDate startDate, LocalDate endDate) throws SQLException;
+
+    List<TeamUploadRecord> loadTeamUploads(LocalDate startDate, LocalDate endDate) throws SQLException;
 }

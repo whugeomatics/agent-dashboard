@@ -199,6 +199,8 @@ P2.5 长期保留约定：
 - team token 绑定默认保存在 `agent-dashboard-team-registry.sqlite`。
 - team usage event 默认按月保存在 `agent-dashboard-team-YYYY-MM.sqlite`，便于清理历史数据。
 - `/api/team/ingest` 使用 `team_id + user_id + device_id + event_key` 幂等去重。
+- 服务端必须记录每次 collector 上报的 `team_id/user_id/device_id/upload_date/upload_time/accepted/duplicate/rejected/status`，不得记录 token。
+- collector 日志可以输出 `upload_time`、上报人、设备、server URL、日期窗口等非敏感诊断信息，禁止输出 token。
 - collector 使用 `--collector-db` 保存本机 checkpoint，与 server `--db` 中央库分离。
 - collector 默认读取 `~/.codex/sessions`，默认 checkpoint 为 `~/.agent-dashboard/collector-sqlite`，日常命令不要求传 `--sessions-dir` 或 `--collector-db`。
 - collector 不启动 HTTP server，不占用 server 端口，也不初始化服务端 team registry。
@@ -207,6 +209,7 @@ P2.5 长期保留约定：
 - collector 默认单 batch 最多 500 条 event，可用 `--batch-size` 调整。
 - 前端必须保留 Local 和 Team 两个明确 Tab。
 - Team Models 必须按 `date + user_id + model` 展示明细，包含 session 时间窗口，默认按 token 降序并支持排序。
+- Team 页面必须支持按 `team_id` 区分和筛选不同团队，并展示 Uploads 上报记录。
 - Team 页面时间字段必须按 report timezone 展示，不直接显示 UTC `Z` 字符串。
 - `/api/team/report` contract 继续兼容 P2.5。
 

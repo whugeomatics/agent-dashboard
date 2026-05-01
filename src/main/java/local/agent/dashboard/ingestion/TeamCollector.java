@@ -12,6 +12,7 @@ import java.net.ConnectException;
 import java.net.HttpURLConnection;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.ArrayList;
@@ -41,6 +42,7 @@ public final class TeamCollector {
     public String uploadRecent(int days) throws Exception {
         LocalDate end = LocalDate.now(zone);
         LocalDate start = end.minusDays(days - 1L);
+        Instant uploadTime = Instant.now();
         List<TeamUsageEvent> events = new ArrayList<>();
         for (ExportedUsageEvent event : localStore.loadExportEvents(start, end)) {
             events.add(new TeamUsageEvent(event.eventKey(), "codex", event.sessionId(), event.model(), event.timestamp(),
@@ -68,7 +70,12 @@ public final class TeamCollector {
             batches = 1;
         }
         return "{\"status\":\"ok\",\"events\":" + events.size() + ",\"batches\":" + batches
-                + ",\"accepted\":" + accepted + ",\"duplicate\":" + duplicate + ",\"rejected\":" + rejected + "}";
+                + ",\"accepted\":" + accepted + ",\"duplicate\":" + duplicate + ",\"rejected\":" + rejected
+                + ",\"upload_time\":\"" + uploadTime + "\""
+                + ",\"client_user_id\":\"" + Json.escape(userId) + "\""
+                + ",\"client_device_id\":\"" + Json.escape(deviceId) + "\""
+                + ",\"server_url\":\"" + Json.escape(safeEndpoint()) + "\""
+                + ",\"start_date\":\"" + start + "\",\"end_date\":\"" + end + "\"}";
     }
 
     private String post(String payload) throws IOException {
@@ -99,9 +106,18 @@ public final class TeamCollector {
         byte[] response = (status >= 200 && status < 400 ? connection.getInputStream() : connection.getErrorStream()).readAllBytes();
         String body = new String(response, StandardCharsets.UTF_8);
         if (status >= 400) {
-            throw new IOException("team upload failed: HTTP " + status + " " + sanitize(body));
+            throw new IOException("team upload failed: HTTP " + status + " " + sanitize(body)
+                    + " client_user_id=" + userId + " client_device_id=" + deviceId
+                    + " server_url=" + endpoint);
         }
         return body;
+    }
+
+    private String safeEndpoint() {
+        if (serverUrl == null || serverUrl.isBlank()) {
+            return "";
+        }
+        return serverUrl.endsWith("/") ? serverUrl.substring(0, serverUrl.length() - 1) : serverUrl;
     }
 
     private String sanitize(String body) {

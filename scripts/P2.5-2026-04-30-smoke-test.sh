@@ -65,6 +65,10 @@ direct2="$(java -jar "$JAR" --db="$DIRECT_DB" --timezone=Asia/Shanghai --device-
 printf '%s\n' "$direct2" | grep '"duplicate":2' >/dev/null
 direct_report="$(java -jar "$JAR" --team-report --days=30 --db="$DIRECT_DB" --timezone=Asia/Shanghai)"
 printf '%s\n' "$direct_report" | grep '"total_tokens":220' >/dev/null
+printf '%s\n' "$direct_report" | grep '"usage_event_count":2' >/dev/null
+printf '%s\n' "$direct_report" | grep '"avg_tokens_per_call":110.00' >/dev/null
+printf '%s\n' "$direct_report" | grep '"reasoning_ratio":0.142857' >/dev/null
+printf '%s\n' "$direct_report" | grep '"upload_health":' >/dev/null
 printf '%s\n' "$direct_report" | grep '"user_id":"user-alice"' >/dev/null
 printf '%s\n' "$direct_report" | grep '"device_id":"device-alice"' >/dev/null
 direct_conflict="$(java -jar "$JAR" --db="$DIRECT_DB" --timezone=Asia/Shanghai --device-token="$TOKEN" --team-ingest-file="$CONFLICT_PAYLOAD")"
@@ -179,6 +183,22 @@ printf '%s\n' "$team_report" | grep '"total_tokens":250' >/dev/null
 printf '%s\n' "$team_report" | grep '"user_id":"user-alice"' >/dev/null
 printf '%s\n' "$team_report" | grep '"device_id":"device-alice"' >/dev/null
 printf '%s\n' "$team_report" | grep '"model":"gpt-5-team-smoke"' >/dev/null
+printf '%s\n' "$team_report" | grep '"teams":' >/dev/null
+printf '%s\n' "$team_report" | grep '"team_models":' >/dev/null
+printf '%s\n' "$team_report" | grep '"usage_event_count":3' >/dev/null
+printf '%s\n' "$team_report" | grep '"avg_tokens_per_session":125.00' >/dev/null
+printf '%s\n' "$team_report" | grep '"avg_tokens_per_call":83.33' >/dev/null
+printf '%s\n' "$team_report" | grep '"cache_hit_rate":0.117647' >/dev/null
+printf '%s\n' "$team_report" | grep '"reasoning_ratio":0.125000' >/dev/null
+printf '%s\n' "$team_report" | grep '"active_seconds":3600' >/dev/null
+printf '%s\n' "$team_report" | grep '"upload_health":' >/dev/null
+printf '%s\n' "$team_report" | grep '"health_status":"' >/dev/null
+printf '%s\n' "$team_report" | grep '"recent_uploads":' >/dev/null
+printf '%s\n' "$team_report" | grep '"uploads":' >/dev/null
+printf '%s\n' "$team_report" | grep '"upload_date":' >/dev/null
+printf '%s\n' "$team_report" | grep '"team_id":"team-smoke"' >/dev/null
+filtered_team_report="$(curl --noproxy '*' -fsS "http://127.0.0.1:$PORT/api/team/report?days=30&team_id=team-smoke")"
+printf '%s\n' "$filtered_team_report" | grep '"total_tokens":250' >/dev/null
 
 kill "$SERVER_PID" >/dev/null 2>&1 || true
 wait "$SERVER_PID" >/dev/null 2>&1 || true

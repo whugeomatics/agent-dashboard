@@ -3,6 +3,7 @@ package local.agent.dashboard.store;
 import local.agent.dashboard.domain.DeviceTokenBinding;
 import local.agent.dashboard.domain.DeviceTokenRecord;
 import local.agent.dashboard.domain.StoredTeamUsageEvent;
+import local.agent.dashboard.domain.TeamUploadRecord;
 import local.agent.dashboard.domain.TeamUsageEvent;
 
 import java.nio.file.Files;
@@ -22,7 +23,8 @@ public final class ShardedTeamUsageStore implements TeamUsageStore {
 
     public ShardedTeamUsageStore(Path rootDir) throws java.io.IOException {
         this.rootDir = rootDir;
-        this.registry = new SqliteTeamUsageStore(rootDir.resolve("agent-dashboard-team-registry.sqlite"));
+        this.registry = new SqliteTeamUsageStore(rootDir.resolve("agent-dashboard-team-registry.sqlite"),
+                true, false, true);
     }
 
     public void initialize() throws Exception {
@@ -58,6 +60,10 @@ public final class ShardedTeamUsageStore implements TeamUsageStore {
         registry.updateDeviceTokenSeen(token);
     }
 
+    public void insertTeamUpload(TeamUploadRecord upload) throws SQLException {
+        registry.insertTeamUpload(upload);
+    }
+
     public boolean insertTeamUsageEvent(DeviceTokenBinding binding, TeamUsageEvent event) throws SQLException {
         return store(YearMonth.from(event.localDate())).insertTeamUsageEvent(binding, event);
     }
@@ -78,6 +84,10 @@ public final class ShardedTeamUsageStore implements TeamUsageStore {
         return events;
     }
 
+    public List<TeamUploadRecord> loadTeamUploads(LocalDate startDate, LocalDate endDate) throws SQLException {
+        return registry.loadTeamUploads(startDate, endDate);
+    }
+
     private StoredTeamUsageEvent enrich(StoredTeamUsageEvent event) throws SQLException {
         DeviceTokenBinding binding = registry.findDeviceBinding(event.teamId(), event.userId(), event.deviceId());
         if (binding == null) {
@@ -96,7 +106,7 @@ public final class ShardedTeamUsageStore implements TeamUsageStore {
             return existing;
         }
         try {
-            SqliteTeamUsageStore created = new SqliteTeamUsageStore(dbPath(shard));
+            SqliteTeamUsageStore created = new SqliteTeamUsageStore(dbPath(shard), false, true, false);
             created.initialize();
             stores.put(shard, created);
             return created;

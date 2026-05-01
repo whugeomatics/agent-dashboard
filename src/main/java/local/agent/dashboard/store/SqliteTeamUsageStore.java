@@ -4,6 +4,7 @@ import local.agent.dashboard.domain.DeviceTokenBinding;
 import local.agent.dashboard.domain.DeviceTokenRecord;
 import local.agent.dashboard.domain.Snapshot;
 import local.agent.dashboard.domain.StoredTeamUsageEvent;
+import local.agent.dashboard.domain.TeamUploadRecord;
 import local.agent.dashboard.domain.TeamUsageEvent;
 
 import java.io.IOException;
@@ -23,10 +24,20 @@ import java.util.List;
 public final class SqliteTeamUsageStore implements TeamUsageStore {
     private final Path dbPath;
     private final SqlScripts scripts;
+    private final boolean tokenTables;
+    private final boolean eventTables;
+    private final boolean uploadTables;
 
     public SqliteTeamUsageStore(Path dbPath) throws IOException {
+        this(dbPath, true, true, true);
+    }
+
+    public SqliteTeamUsageStore(Path dbPath, boolean tokenTables, boolean eventTables, boolean uploadTables) throws IOException {
         this.dbPath = dbPath;
         this.scripts = SqlScripts.load("/db/schema-v1.sql");
+        this.tokenTables = tokenTables;
+        this.eventTables = eventTables;
+        this.uploadTables = uploadTables;
     }
 
     public void initialize() throws Exception {
@@ -36,13 +47,22 @@ public final class SqliteTeamUsageStore implements TeamUsageStore {
         }
         try (Connection connection = connect(); Statement statement = connection.createStatement()) {
             statement.executeUpdate(scripts.statement("create_schema_migrations"));
-            statement.executeUpdate(scripts.statement("create_device_tokens"));
-            addTokenSecretColumn(statement);
-            statement.executeUpdate(scripts.statement("create_team_usage_events"));
-            statement.executeUpdate(scripts.statement("create_idx_team_usage_events_local_date"));
-            statement.executeUpdate(scripts.statement("create_idx_team_usage_events_user"));
-            statement.executeUpdate(scripts.statement("create_idx_team_usage_events_device"));
-            statement.executeUpdate(scripts.statement("create_idx_team_usage_events_model"));
+            if (tokenTables) {
+                statement.executeUpdate(scripts.statement("create_device_tokens"));
+                addTokenSecretColumn(statement);
+            }
+            if (eventTables) {
+                statement.executeUpdate(scripts.statement("create_team_usage_events"));
+                statement.executeUpdate(scripts.statement("create_idx_team_usage_events_local_date"));
+                statement.executeUpdate(scripts.statement("create_idx_team_usage_events_user"));
+                statement.executeUpdate(scripts.statement("create_idx_team_usage_events_device"));
+                statement.executeUpdate(scripts.statement("create_idx_team_usage_events_model"));
+            }
+            if (uploadTables) {
+                statement.executeUpdate(scripts.statement("create_team_uploads"));
+                statement.executeUpdate(scripts.statement("create_idx_team_uploads_date"));
+                statement.executeUpdate(scripts.statement("create_idx_team_uploads_team_user"));
+            }
         }
         try (Connection connection = connect();
              PreparedStatement statement = connection.prepareStatement(scripts.statement("insert_schema_migration"))) {
@@ -142,6 +162,24 @@ public final class SqliteTeamUsageStore implements TeamUsageStore {
         }
     }
 
+    public void insertTeamUpload(TeamUploadRecord upload) throws SQLException {
+        try (Connection connection = connect();
+             PreparedStatement statement = connection.prepareStatement(scripts.statement("insert_team_upload"))) {
+            statement.setString(1, upload.teamId());
+            statement.setString(2, upload.userId());
+            statement.setString(3, upload.deviceId());
+            statement.setString(4, upload.uploadDate());
+            statement.setString(5, upload.uploadTime());
+            statement.setInt(6, upload.eventCount());
+            statement.setInt(7, upload.accepted());
+            statement.setInt(8, upload.duplicate());
+            statement.setInt(9, upload.rejected());
+            statement.setString(10, upload.status());
+            statement.setString(11, upload.message());
+            statement.executeUpdate();
+        }
+    }
+
     public boolean insertTeamUsageEvent(DeviceTokenBinding binding, TeamUsageEvent event) throws SQLException {
         try (Connection connection = connect();
              PreparedStatement statement = connection.prepareStatement(scripts.statement("insert_team_usage_event"))) {
@@ -167,7 +205,8 @@ public final class SqliteTeamUsageStore implements TeamUsageStore {
     public List<StoredTeamUsageEvent> loadTeamEvents(LocalDate startDate, LocalDate endDate) throws SQLException {
         List<StoredTeamUsageEvent> events = new ArrayList<>();
         try (Connection connection = connect();
-             PreparedStatement statement = connection.prepareStatement(scripts.statement("load_team_usage_events"))) {
+             PreparedStatement statement = connection.prepareStatement(scripts.statement(
+                     tokenTables ? "load_team_usage_events" : "load_team_usage_events_plain"))) {
             statement.setString(1, startDate.toString());
             statement.setString(2, endDate.toString());
             try (ResultSet rs = statement.executeQuery()) {
@@ -183,6 +222,24 @@ public final class SqliteTeamUsageStore implements TeamUsageStore {
             }
         }
         return events;
+    }
+
+    public List<TeamUploadRecord> loadTeamUploads(LocalDate startDate, LocalDate endDate) throws SQLException {
+        List<TeamUploadRecord> uploads = new ArrayList<>();
+        try (Connection connection = connect();
+             PreparedStatement statement = connection.prepareStatement(scripts.statement("load_team_uploads"))) {
+            statement.setString(1, startDate.toString());
+            statement.setString(2, endDate.toString());
+            try (ResultSet rs = statement.executeQuery()) {
+                while (rs.next()) {
+                    uploads.add(new TeamUploadRecord(rs.getString("team_id"), rs.getString("user_id"),
+                            rs.getString("device_id"), rs.getString("upload_date"), rs.getString("upload_time"),
+                            rs.getInt("event_count"), rs.getInt("accepted"), rs.getInt("duplicate"),
+                            rs.getInt("rejected"), rs.getString("status"), rs.getString("message")));
+                }
+            }
+        }
+        return uploads;
     }
 
     private Connection connect() throws SQLException {

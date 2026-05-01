@@ -29,6 +29,10 @@ public final class TokenTotals {
         return inputTokens == 0 ? 0.0d : (double) cachedInputTokens / (double) inputTokens;
     }
 
+    public double reasoningRatio() {
+        return outputTokens == 0 ? 0.0d : (double) reasoningOutputTokens / (double) outputTokens;
+    }
+
     public String jsonFields() {
         return "\"input_tokens\":" + inputTokens
                 + ",\"cached_input_tokens\":" + cachedInputTokens
@@ -37,6 +41,7 @@ public final class TokenTotals {
                 + ",\"total_tokens\":" + totalTokens
                 + ",\"non_cached_input_tokens\":" + nonCachedInputTokens()
                 + ",\"net_tokens\":" + netTokens()
-                + ",\"cache_hit_rate\":" + String.format(Locale.ROOT, "%.6f", cacheHitRate());
+                + ",\"cache_hit_rate\":" + String.format(Locale.ROOT, "%.6f", cacheHitRate())
+                + ",\"reasoning_ratio\":" + String.format(Locale.ROOT, "%.6f", reasoningRatio());
     }
 }

@@ -51,25 +51,34 @@ function renderTokens(rows) {
     <td>${escapeHtml(row.team_id)}</td>
     <td>${escapeHtml(row.user_id)}</td>
     <td>${escapeHtml(row.device_id)}</td>
-    <td><code>${escapeHtml(row.token_preview)}</code></td>
+    <td>
+      <div class="token-cell">
+        <code>${escapeHtml(row.token_preview)}</code>
+        <button type="button" class="icon-button copy-token-button" data-copy-token="${escapeHtml(row.token_id)}" ${row.token_recoverable ? '' : 'disabled'} title="Copy device token" aria-label="Copy device token">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <rect x="9" y="9" width="10" height="10" rx="2"></rect>
+            <path d="M5 15V7a2 2 0 0 1 2-2h8"></path>
+          </svg>
+        </button>
+      </div>
+    </td>
     <td>${escapeHtml(row.display_name)}</td>
     <td>${escapeHtml(row.status)}</td>
-    <td>${escapeHtml(row.created_at)}</td>
-    <td>${escapeHtml(row.last_seen_at)}</td>
+    <td>${escapeHtml(formatDateTime(row.created_at))}</td>
+    <td>${escapeHtml(formatDateTime(row.last_seen_at))}</td>
     <td class="actions">
-      <button type="button" data-copy-token="${escapeHtml(row.token_id)}" ${row.token_recoverable ? '' : 'disabled'}>Copy</button>
       <button type="button" class="danger" data-delete-token="${escapeHtml(row.token_id)}">Delete</button>
     </td>
   </tr>`).join('') : '<tr><td colspan="9" class="empty">No token bindings yet</td></tr>';
 }
 
 document.addEventListener('click', async (event) => {
-  const copyId = event.target?.dataset?.copyToken;
+  const copyId = event.target?.closest?.('[data-copy-token]')?.dataset?.copyToken;
   if (copyId) {
     await copyDeviceToken(copyId);
     return;
   }
-  const deleteId = event.target?.dataset?.deleteToken;
+  const deleteId = event.target?.closest?.('[data-delete-token]')?.dataset?.deleteToken;
   if (deleteId) {
     await deleteDeviceToken(deleteId);
   }
@@ -87,7 +96,7 @@ async function copyDeviceToken(tokenId) {
     return;
   }
   await navigator.clipboard.writeText(data.device_token);
-  qs('pageStatus').textContent = 'Device token copied';
+  showToast('Device token copied');
 }
 
 async function deleteDeviceToken(tokenId) {
@@ -110,6 +119,29 @@ async function deleteDeviceToken(tokenId) {
 
 function escapeHtml(value) {
   return String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
+}
+
+function formatDateTime(value) {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString(undefined, {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit'
+  });
+}
+
+let toastTimer;
+function showToast(message) {
+  const toast = qs('toast');
+  toast.textContent = message;
+  toast.classList.remove('hidden');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => toast.classList.add('hidden'), 2200);
 }
 
 loadTokens();

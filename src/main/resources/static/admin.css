@@ -39,6 +39,20 @@ a { color: var(--accent); text-decoration: none; }
 .meta, .status { color: var(--muted); }
 .status { margin-top: 12px; min-height: 20px; }
 .status.error { color: var(--danger); }
+.toast {
+  position: fixed;
+  top: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 20;
+  border: 1px solid #b8d8c6;
+  border-radius: 8px;
+  background: #f3fbf6;
+  color: var(--success);
+  box-shadow: 0 8px 24px rgba(23, 32, 42, 0.14);
+  padding: 10px 14px;
+  font-weight: 600;
+}
 .panel {
   background: var(--panel);
   border: 1px solid var(--line);
@@ -103,6 +117,38 @@ button.danger {
 table { width: 100%; min-width: 1040px; border-collapse: collapse; }
 th, td { padding: 10px 12px; border-bottom: 1px solid var(--line); text-align: left; white-space: nowrap; }
 th { color: var(--muted); font-size: 12px; background: #fbfcfd; }
+.token-cell {
+  position: relative;
+  min-width: 146px;
+  padding-right: 34px;
+}
+.token-cell code { font-weight: 700; }
+.icon-button {
+  min-height: 28px;
+  width: 28px;
+  padding: 0;
+  display: inline-grid;
+  place-items: center;
+}
+.copy-token-button {
+  position: absolute;
+  top: -6px;
+  right: 0;
+  border-color: transparent;
+  background: transparent;
+  color: var(--accent);
+}
+.copy-token-button:hover { background: #e8f3f6; border-color: #c6dce3; }
+.copy-token-button svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.copy-token-button:disabled { background: transparent; border-color: transparent; }
 .actions { display: flex; gap: 8px; }
 .actions button { min-height: 30px; padding: 0 10px; }
 .empty { color: var(--muted); padding: 22px 12px; }

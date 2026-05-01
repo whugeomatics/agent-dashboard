@@ -150,6 +150,7 @@ public final class DashboardServer {
                 case "identity_conflict" -> 409;
                 case "invalid_payload" -> 400;
                 case "payload_too_large" -> 413;
+                case "storage_error" -> 500;
                 default -> 200;
             };
             writeJson(exchange, status, result.toJson());

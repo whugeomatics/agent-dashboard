@@ -53,6 +53,9 @@ public final class ReportService {
         private final Map<LocalDate, DailyBucket> daily = new LinkedHashMap<>();
         private final Map<String, ModelBucket> models = new HashMap<>();
         private final Map<String, SessionBucket> sessions = new HashMap<>();
+        private int eventCount;
+        private Instant startedAt;
+        private Instant endedAt;
 
         Aggregator(ReportQuery query) {
             this.query = query;
@@ -65,6 +68,9 @@ public final class ReportService {
 
         void add(UsageEvent event) {
             summary.add(event.usage());
+            eventCount++;
+            startedAt = min(startedAt, event.timestamp());
+            endedAt = max(endedAt, event.timestamp());
             LocalDate date = event.timestamp().atZone(query.zone()).toLocalDate();
             daily.computeIfAbsent(date, DailyBucket::new).add(event);
             models.computeIfAbsent(event.model(), ModelBucket::new).add(event);
@@ -72,7 +78,8 @@ public final class ReportService {
         }
 
         Report toReport() {
-            return new ReportPayload(query, summary, new ArrayList<>(daily.values()),
+            return new ReportPayload(query, summary, eventCount, sessions.size(), activeSeconds(startedAt, endedAt),
+                    new ArrayList<>(daily.values()),
                     models.values().stream()
                             .sorted(Comparator.comparingLong((ModelBucket bucket) -> bucket.totals.totalTokens).reversed())
                             .toList(),
@@ -86,6 +93,7 @@ public final class ReportService {
         final String sessionId;
         final TokenTotals totals = new TokenTotals();
         final Set<String> models = new HashSet<>();
+        int eventCount;
         Instant startedAt;
         Instant endedAt;
 
@@ -96,6 +104,7 @@ public final class ReportService {
         void add(UsageEvent event) {
             totals.add(event.usage());
             models.add(event.model());
+            eventCount++;
             startedAt = min(startedAt, event.timestamp());
             endedAt = max(endedAt, event.timestamp());
         }
@@ -105,6 +114,7 @@ public final class ReportService {
         final String model;
         final TokenTotals totals = new TokenTotals();
         final Set<String> sessions = new HashSet<>();
+        int eventCount;
         Instant startedAt;
         Instant endedAt;
 
@@ -115,6 +125,7 @@ public final class ReportService {
         void add(UsageEvent event) {
             totals.add(event.usage());
             sessions.add(event.sessionId());
+            eventCount++;
             startedAt = min(startedAt, event.timestamp());
             endedAt = max(endedAt, event.timestamp());
         }
@@ -124,6 +135,9 @@ public final class ReportService {
         final LocalDate date;
         final TokenTotals totals = new TokenTotals();
         final Set<String> sessions = new HashSet<>();
+        int eventCount;
+        Instant startedAt;
+        Instant endedAt;
 
         DailyBucket(LocalDate date) {
             this.date = date;
@@ -132,10 +146,14 @@ public final class ReportService {
         void add(UsageEvent event) {
             totals.add(event.usage());
             sessions.add(event.sessionId());
+            eventCount++;
+            startedAt = min(startedAt, event.timestamp());
+            endedAt = max(endedAt, event.timestamp());
         }
     }
 
-    private record ReportPayload(ReportQuery query, TokenTotals summary, List<DailyBucket> daily,
+    private record ReportPayload(ReportQuery query, TokenTotals summary, int eventCount, int sessionCount,
+                                 long activeSeconds, List<DailyBucket> daily,
                                  List<ModelBucket> models, List<SessionBucket> sessions) implements Report {
         public String toJson() {
             StringBuilder out = new StringBuilder();
@@ -146,20 +164,24 @@ public final class ReportService {
                     .append("\"end_date\":\"").append(query.endDate()).append("\",")
                     .append("\"timezone\":\"").append(Json.escape(query.zone().getId())).append("\"")
                     .append("},");
-            out.append("\"summary\":{").append(summary.jsonFields()).append("},");
+            out.append("\"summary\":{").append(summary.jsonFields())
+                    .append(derivedJson(summary, eventCount, sessionCount, activeSeconds)).append("},");
             out.append("\"daily\":");
             out.append(Json.array(daily, bucket -> "{"
                     + "\"date\":\"" + bucket.date + "\","
                     + bucket.totals.jsonFields() + ","
                     + "\"session_count\":" + bucket.sessions.size()
+                    + derivedJson(bucket.totals, bucket.eventCount, bucket.sessions.size(),
+                    ReportService.activeSeconds(bucket.startedAt, bucket.endedAt))
                     + "}"));
             out.append(',');
             out.append("\"models\":");
             out.append(Json.array(models, bucket -> "{"
                     + "\"model\":\"" + Json.escape(bucket.model) + "\","
                     + bucket.totals.jsonFields() + ","
-                    + "\"session_count\":" + bucket.sessions.size() + ","
-                    + "\"active_seconds\":" + activeSeconds(bucket.startedAt, bucket.endedAt)
+                    + "\"session_count\":" + bucket.sessions.size()
+                    + derivedJson(bucket.totals, bucket.eventCount, bucket.sessions.size(),
+                    ReportService.activeSeconds(bucket.startedAt, bucket.endedAt))
                     + "}"));
             out.append(',');
             out.append("\"sessions\":");
@@ -167,12 +189,25 @@ public final class ReportService {
                     + "\"session_id\":\"" + Json.escape(bucket.sessionId) + "\","
                     + "\"started_at\":\"" + formatInstant(bucket.startedAt, query.zone()) + "\","
                     + "\"ended_at\":\"" + formatInstant(bucket.endedAt, query.zone()) + "\","
-                    + "\"active_seconds\":" + activeSeconds(bucket.startedAt, bucket.endedAt) + ","
+                    + "\"active_seconds\":" + ReportService.activeSeconds(bucket.startedAt, bucket.endedAt) + ","
                     + "\"models\":" + Json.stringArray(bucket.models.stream().sorted().toList()) + ","
+                    + "\"usage_event_count\":" + bucket.eventCount + ","
+                    + "\"avg_tokens_per_call\":" + decimal(bucket.eventCount == 0 ? 0.0d : (double) bucket.totals.totalTokens / bucket.eventCount) + ","
                     + bucket.totals.jsonFields()
                     + "}"));
             out.append("}");
             return out.toString();
+        }
+
+        private static String derivedJson(TokenTotals totals, int eventCount, int sessions, long activeSeconds) {
+            return ",\"usage_event_count\":" + eventCount
+                    + ",\"active_seconds\":" + activeSeconds
+                    + ",\"avg_tokens_per_session\":" + decimal(sessions == 0 ? 0.0d : (double) totals.totalTokens / sessions)
+                    + ",\"avg_tokens_per_call\":" + decimal(eventCount == 0 ? 0.0d : (double) totals.totalTokens / eventCount);
+        }
+
+        private static String decimal(double value) {
+            return String.format(Locale.ROOT, "%.2f", value);
         }
     }
 

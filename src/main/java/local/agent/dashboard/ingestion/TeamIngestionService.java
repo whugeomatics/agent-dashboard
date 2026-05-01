@@ -3,6 +3,7 @@ package local.agent.dashboard.ingestion;
 import local.agent.dashboard.domain.DeviceTokenBinding;
 import local.agent.dashboard.domain.Snapshot;
 import local.agent.dashboard.domain.TeamIngestResult;
+import local.agent.dashboard.domain.TeamUploadRecord;
 import local.agent.dashboard.domain.TeamUsageEvent;
 import local.agent.dashboard.store.TeamUsageStore;
 import local.agent.dashboard.util.Json;
@@ -60,23 +61,52 @@ public final class TeamIngestionService {
         int duplicate = 0;
         int rejected = 0;
         List<String> eventObjects = Json.objectElements(eventsJson.get());
+        Instant uploadTime = Instant.now();
+        String uploadDate = uploadTime.atZone(zone).toLocalDate().toString();
         if (eventObjects.size() > MAX_EVENTS_PER_BATCH) {
             return TeamIngestResult.error("payload_too_large", "too many events in one batch");
         }
-        for (String eventJson : eventObjects) {
-            TeamUsageEvent event = parseEvent(eventJson, clientUserId, clientDeviceId);
-            if (event == null) {
-                rejected++;
-                continue;
+        try {
+            for (String eventJson : eventObjects) {
+                TeamUsageEvent event = parseEvent(eventJson, clientUserId, clientDeviceId);
+                if (event == null) {
+                    rejected++;
+                    continue;
+                }
+                if (store.insertTeamUsageEvent(binding, event)) {
+                    accepted++;
+                } else {
+                    duplicate++;
+                }
             }
-            if (store.insertTeamUsageEvent(binding, event)) {
-                accepted++;
-            } else {
-                duplicate++;
-            }
+            store.updateDeviceTokenSeen(token);
+            store.insertTeamUpload(new TeamUploadRecord(binding.teamId(), binding.userId(), binding.deviceId(),
+                    uploadDate, uploadTime.toString(), eventObjects.size(), accepted, duplicate, rejected,
+                    "ok", ""));
+            return TeamIngestResult.ok(accepted, duplicate, rejected, eventObjects.size(), binding, uploadDate);
+        } catch (SQLException e) {
+            recordUploadFailure(binding, uploadDate, uploadTime, eventObjects.size(), "sqlite_error");
+            return TeamIngestResult.error("storage_error", "team upload storage failed: " + safeSqliteMessage(e),
+                    eventObjects.size(), binding, uploadDate);
         }
-        store.updateDeviceTokenSeen(token);
-        return TeamIngestResult.ok(accepted, duplicate, rejected);
+    }
+
+    private void recordUploadFailure(DeviceTokenBinding binding, String uploadDate, Instant uploadTime,
+                                     int eventCount, String message) {
+        try {
+            store.insertTeamUpload(new TeamUploadRecord(binding.teamId(), binding.userId(), binding.deviceId(),
+                    uploadDate, uploadTime.toString(), eventCount, 0, 0, 0, "error", message));
+        } catch (SQLException ignored) {
+            // Upload diagnostics are best-effort; never expose tokens or raw payloads.
+        }
+    }
+
+    private String safeSqliteMessage(SQLException e) {
+        String message = e.getMessage();
+        if (message == null || message.isBlank()) {
+            return e.getClass().getSimpleName();
+        }
+        return message.length() > 180 ? message.substring(0, 180) : message;
     }
 
     private TeamUsageEvent parseEvent(String json, String clientUserId, String clientDeviceId) {
