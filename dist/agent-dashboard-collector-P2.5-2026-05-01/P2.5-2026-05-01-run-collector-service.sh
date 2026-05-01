@@ -12,10 +12,10 @@ fi
 
 SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 ROOT="$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)"
-if [ -f "$SCRIPT_DIR/agent-dashboard-0.1.0-SNAPSHOT.jar" ]; then
-  DEFAULT_JAR="$SCRIPT_DIR/agent-dashboard-0.1.0-SNAPSHOT.jar"
+if [ -f "$SCRIPT_DIR/agent-dashboard-collector-0.1.0-SNAPSHOT.jar" ]; then
+  DEFAULT_JAR="$SCRIPT_DIR/agent-dashboard-collector-0.1.0-SNAPSHOT.jar"
 else
-  DEFAULT_JAR="$ROOT/target/agent-dashboard-0.1.0-SNAPSHOT.jar"
+  DEFAULT_JAR="$ROOT/agent-dashboard-collector/target/agent-dashboard-collector-0.1.0-SNAPSHOT.jar"
 fi
 JAR="${AGENT_DASHBOARD_JAR:-$DEFAULT_JAR}"
 JAVA_BIN="${AGENT_DASHBOARD_JAVA:-${JAVA_HOME:+$JAVA_HOME/bin/java}}"

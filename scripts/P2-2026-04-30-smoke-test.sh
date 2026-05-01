@@ -2,7 +2,7 @@
 set -eu
 
 ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
-JAR="$ROOT/target/agent-dashboard-0.1.0-SNAPSHOT.jar"
+JAR="$ROOT/agent-dashboard-app/target/agent-dashboard-0.1.0-SNAPSHOT.jar"
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/agent-dashboard-p2.XXXXXX")"
 SESSIONS="$WORK/sessions/2026/04/30"
 DB_FILE="$WORK/agent-dashboard.sqlite"

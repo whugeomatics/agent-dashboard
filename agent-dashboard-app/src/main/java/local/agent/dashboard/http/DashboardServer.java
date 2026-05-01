@@ -6,6 +6,8 @@ import com.sun.net.httpserver.HttpServer;
 import local.agent.dashboard.domain.Report;
 import local.agent.dashboard.domain.ReportQuery;
 import local.agent.dashboard.domain.TeamIngestResult;
+import local.agent.dashboard.ingestion.CodexIngestionService;
+import local.agent.dashboard.ingestion.IngestionResult;
 import local.agent.dashboard.ingestion.TeamIngestionService;
 import local.agent.dashboard.report.ReportService;
 import local.agent.dashboard.report.TeamReportService;
@@ -24,15 +26,19 @@ import java.util.concurrent.Executors;
 public final class DashboardServer {
     private final int port;
     private final ReportService reportService;
+    private final CodexIngestionService localIngestionService;
     private final TeamIngestionService teamIngestionService;
     private final TeamReportService teamReportService;
     private final AdminAuth adminAuth;
     private final AdminService adminService;
+    private final Object localIngestionLock = new Object();
 
-    public DashboardServer(int port, ReportService reportService, TeamIngestionService teamIngestionService,
-                           TeamReportService teamReportService, TeamUsageStore teamUsageStore, String adminToken) {
+    public DashboardServer(int port, ReportService reportService, CodexIngestionService localIngestionService,
+                           TeamIngestionService teamIngestionService, TeamReportService teamReportService,
+                           TeamUsageStore teamUsageStore, String adminToken) {
         this.port = port;
         this.reportService = reportService;
+        this.localIngestionService = localIngestionService;
         this.teamIngestionService = teamIngestionService;
         this.teamReportService = teamReportService;
         this.adminAuth = new AdminAuth(adminToken);
@@ -42,6 +48,7 @@ public final class DashboardServer {
     public void start() throws IOException {
         HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", port), 0);
         server.createContext("/api/report", this::handleReport);
+        server.createContext("/api/ingest", this::handleLocalIngest);
         server.createContext("/api/team/ingest", this::handleTeamIngest);
         server.createContext("/api/team/report", this::handleTeamReport);
         server.createContext("/api/admin/login", this::handleAdminLogin);
@@ -116,6 +123,22 @@ public final class DashboardServer {
             writeJson(exchange, 400, error("invalid_query", e.getMessage()));
         } catch (Exception e) {
             writeJson(exchange, 500, error("internal_error", e.getMessage()));
+        }
+    }
+
+    private void handleLocalIngest(HttpExchange exchange) throws IOException {
+        if (!"POST".equalsIgnoreCase(exchange.getRequestMethod())) {
+            writeJson(exchange, 405, error("method_not_allowed", "Only POST is supported"));
+            return;
+        }
+        try {
+            IngestionResult result;
+            synchronized (localIngestionLock) {
+                result = localIngestionService.ingest();
+            }
+            writeJson(exchange, result.errors().isEmpty() ? 200 : 500, result.toJson());
+        } catch (Exception e) {
+            writeJson(exchange, 500, error("internal_error", e.getClass().getSimpleName()));
         }
     }
 

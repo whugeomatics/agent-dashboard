@@ -2,7 +2,8 @@
 set -eu
 
 ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
-JAR="$ROOT/target/agent-dashboard-0.1.0-SNAPSHOT.jar"
+JAR="$ROOT/agent-dashboard-app/target/agent-dashboard-0.1.0-SNAPSHOT.jar"
+COLLECTOR_JAR="$ROOT/agent-dashboard-collector/target/agent-dashboard-collector-0.1.0-SNAPSHOT.jar"
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/agent-dashboard-p25.XXXXXX")"
 SESSIONS="$WORK/sessions/2026/04/30"
 SERVER_DB="$WORK/server-db"
@@ -19,6 +20,13 @@ PORT=$((19080 + ($$ % 1000)))
 TOKEN="p25-smoke-token"
 BAD_TOKEN="p25-bad-token"
 ADMIN_TOKEN="p25-admin-token"
+
+test -f "$JAR"
+test -f "$COLLECTOR_JAR"
+if jar tf "$COLLECTOR_JAR" | grep -E '(^static/|local/agent/dashboard/http/|local/agent/dashboard/app/AgentTokenDashboardApp|DashboardServer|AdminService|AdminAuth|DashboardPage)' >/dev/null; then
+  printf '%s\n' "collector jar contains dashboard-only classes or static assets" >&2
+  exit 1
+fi
 
 mkdir -p "$SESSIONS" "$DEFAULT_SESSIONS"
 
@@ -143,7 +151,7 @@ if printf '%s\n' "$admin_list_after_delete" | grep '"user_id":"user-bob"' >/dev/
   exit 1
 fi
 
-upload1="$(java -jar "$JAR" --collect-team --sessions-dir="$SESSIONS" --collector-db="$COLLECTOR_DB" \
+upload1="$(java -jar "$COLLECTOR_JAR" --collect-team --sessions-dir="$SESSIONS" --collector-db="$COLLECTOR_DB" \
   --timezone=Asia/Shanghai --server-url="http://127.0.0.1:$PORT" --device-token="$TOKEN" \
   --user-id=user-alice --device-id=device-alice --days=30 --batch-size=1)"
 printf '%s\n' "$upload1" | grep '"status":"ok"' >/dev/null
@@ -154,12 +162,12 @@ if test -f "$COLLECTOR_DB/agent-dashboard-team-registry.sqlite"; then
   exit 1
 fi
 
-upload2="$(java -jar "$JAR" --collect-team --sessions-dir="$SESSIONS" --collector-db="$COLLECTOR_DB" \
+upload2="$(java -jar "$COLLECTOR_JAR" --collect-team --sessions-dir="$SESSIONS" --collector-db="$COLLECTOR_DB" \
   --timezone=Asia/Shanghai --server-url="http://127.0.0.1:$PORT" --device-token="$TOKEN" \
   --user-id=user-alice --device-id=device-alice --days=30 --batch-size=1)"
 printf '%s\n' "$upload2" | grep '"duplicate":2' >/dev/null
 
-default_upload="$(java -Duser.home="$DEFAULT_HOME" -jar "$JAR" --collect-team \
+default_upload="$(java -Duser.home="$DEFAULT_HOME" -jar "$COLLECTOR_JAR" --collect-team \
   --timezone=Asia/Shanghai --server-url="http://127.0.0.1:$PORT" --device-token="$TOKEN" \
   --user-id=user-alice --device-id=device-alice --days=30)"
 printf '%s\n' "$default_upload" | grep '"accepted":1' >/dev/null

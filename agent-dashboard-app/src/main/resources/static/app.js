@@ -39,7 +39,7 @@ document.querySelectorAll('[data-team-section-tab]').forEach((button) => {
     renderTeamSections();
   });
 });
-qs('refresh').addEventListener('click', () => load({ showToast: true }));
+qs('refresh').addEventListener('click', () => load({ showToast: true, ingestLocal: state.view === 'local' }));
 qs('teamFilter').addEventListener('change', () => {
   state.teamId = qs('teamFilter').value;
   load();
@@ -61,6 +61,12 @@ async function load(options = {}) {
   statusEl().textContent = 'Loading...';
   statusEl().className = 'status';
   try {
+    if (options.ingestLocal) {
+      const ingestResponse = await fetch('/api/ingest', { method: 'POST', cache: 'no-store' });
+      if (!ingestResponse.ok) throw new Error(`Ingest HTTP ${ingestResponse.status}`);
+      const ingestResult = await ingestResponse.json();
+      if (ingestResult.status !== 'ok') throw new Error('Ingest failed');
+    }
     const endpoint = state.view === 'team' ? '/api/team/report' : '/api/report';
     const query = state.view === 'team' && state.teamId
       ? `${rangeForView()}&team_id=${encodeURIComponent(state.teamId)}`

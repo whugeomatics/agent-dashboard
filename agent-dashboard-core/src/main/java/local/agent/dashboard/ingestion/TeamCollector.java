@@ -1,7 +1,6 @@
 package local.agent.dashboard.ingestion;
 
 import local.agent.dashboard.domain.ExportedUsageEvent;
-import local.agent.dashboard.domain.ReportQuery;
 import local.agent.dashboard.domain.TeamUsageEvent;
 import local.agent.dashboard.store.UsageStore;
 import local.agent.dashboard.util.Json;
@@ -16,7 +15,6 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 
 public final class TeamCollector {

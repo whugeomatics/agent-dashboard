@@ -5,7 +5,6 @@ import local.agent.dashboard.domain.ReportQuery;
 import local.agent.dashboard.http.DashboardServer;
 import local.agent.dashboard.ingestion.CodexIngestionService;
 import local.agent.dashboard.ingestion.IngestionResult;
-import local.agent.dashboard.ingestion.TeamCollector;
 import local.agent.dashboard.ingestion.TeamIngestionService;
 import local.agent.dashboard.report.ReportService;
 import local.agent.dashboard.report.TeamReportService;
@@ -14,9 +13,7 @@ import local.agent.dashboard.store.TeamUsageStores;
 import local.agent.dashboard.store.UsageStore;
 import local.agent.dashboard.store.UsageStores;
 import local.agent.dashboard.util.DeviceTokenGenerator;
-import local.agent.dashboard.util.Json;
 
-import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -29,8 +26,7 @@ public final class AgentTokenDashboardApp {
         AppConfig config = AppConfig.from(args);
 
         if (config.collectTeamMode()) {
-            runCollector(config);
-            return;
+            throw new IllegalArgumentException("--collect-team is provided by agent-dashboard-collector");
         }
 
         if (config.createDeviceTokenMode()) {
@@ -81,10 +77,11 @@ public final class AgentTokenDashboardApp {
             return;
         }
 
-        IngestionResult startupIngestion = new CodexIngestionService(config.sessionsDir(), config.zone(), usageStore).ingest();
+        CodexIngestionService localIngestionService = new CodexIngestionService(config.sessionsDir(), config.zone(), usageStore);
+        IngestionResult startupIngestion = localIngestionService.ingest();
         System.out.println("Startup ingestion: " + startupIngestion.toJson());
 
-        DashboardServer server = new DashboardServer(config.port(), reportService,
+        DashboardServer server = new DashboardServer(config.port(), reportService, localIngestionService,
                 new TeamIngestionService(teamUsageStore, config.zone()), teamReportService,
                 teamUsageStore, config.options().get("admin-token"));
         server.start();
@@ -94,25 +91,6 @@ public final class AgentTokenDashboardApp {
         System.out.println("Agent Dashboard DB: " + config.dbPath());
         System.out.println("Agent Dashboard Team registry DB: " + TeamUsageStores.resolveTeamRegistryPath(config.dbPath()));
         System.out.println("Agent Dashboard Team event DB pattern: " + TeamUsageStores.resolveTeamDbPath(config.dbPath()));
-    }
-
-    private static void runCollector(AppConfig config) throws Exception {
-        UsageStore collectorStore = openUsageStore(config.collectorDbPath());
-        IngestionResult result = new CodexIngestionService(config.sessionsDir(), config.zone(), collectorStore).ingest();
-        if (!result.errors().isEmpty()) {
-            System.out.println(result.toJson());
-            System.exit(1);
-        }
-        TeamCollector collector = new TeamCollector(collectorStore, config.zone(), config.options().get("server-url"),
-                config.options().get("device-token"), config.options().get("user-id"), config.options().get("device-id"),
-                batchSize(config));
-        try {
-            System.out.println(collector.uploadRecent(reportDays(config)));
-        } catch (IOException e) {
-            System.out.println("{\"status\":\"error\",\"error_code\":\"collector_upload_failed\",\"message\":\""
-                    + Json.escape(e.getMessage()) + "\"}");
-            System.exit(1);
-        }
     }
 
     private static UsageStore openUsageStore(Path path) throws Exception {
@@ -147,19 +125,6 @@ public final class AgentTokenDashboardApp {
         }
         String deviceName = config.options().getOrDefault("device-name", deviceId);
         teamUsageStore.upsertDeviceToken(token, new DeviceTokenBinding(teamId, userId, deviceId, deviceName, "active"));
-    }
-
-    private static int reportDays(AppConfig config) {
-        String days = config.reportQuery().get("days");
-        return days == null || days.isBlank() ? 7 : Integer.parseInt(days);
-    }
-
-    private static int batchSize(AppConfig config) {
-        String batchSize = config.options().get("batch-size");
-        if (batchSize == null || batchSize.isBlank()) {
-            return 500;
-        }
-        return Math.max(1, Math.min(500, Integer.parseInt(batchSize)));
     }
 
     private static String required(AppConfig config, String key) {
