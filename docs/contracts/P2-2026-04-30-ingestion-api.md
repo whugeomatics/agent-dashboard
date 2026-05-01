@@ -20,6 +20,11 @@ java -jar target\agent-dashboard-0.1.0-SNAPSHOT.jar --ingest
 --timezone=<iana-zone>
 ```
 
+`--db` 兼容两种形式：
+
+- 指向 `.sqlite` / `.db` 文件：写入单 SQLite 文件，保留 P2 初始验收脚本兼容性。
+- 指向目录：按月写入 `agent-dashboard-YYYY-MM.sqlite` 分片文件。
+
 环境变量：
 
 - `CODEX_SESSIONS_DIR`: 覆盖 Codex session JSONL 目录。
@@ -37,6 +42,16 @@ P2 暂不要求新增公开 ingestion HTTP API。
 - 降低误触发重扫风险。
 
 后续如需要手动刷新，可在 P2 review 后决定是否增加只绑定 `127.0.0.1` 的内部 endpoint。
+
+## Dashboard 启动采集
+
+2026-04-30 mac 修复后，普通 dashboard 服务启动时会先执行一次本地 Codex ingestion，再启动只读 `/api/report`。
+
+原因：
+
+- 避免页面只读取空 SQLite，导致 session 和 token 统计无值。
+- 保持页面 API 只读，不新增公开写入 endpoint。
+- 仍保留 `--ingest` CLI，便于定时任务或手动刷新。
 
 ## 采集输入
 
@@ -58,6 +73,13 @@ P2 暂不要求新增公开 ingestion HTTP API。
 - response 正文。
 - `response_item` 内容。
 - rate limit 字段。
+
+旧版本或中断的 Codex session 可能没有 `token_count` 事件。P2 对这类文件的行为是：
+
+- 仍记录 `source_files` checkpoint，表示文件已扫描。
+- 不写入 `usage_events`，因为没有可验证的 token usage 来源。
+- `/api/report` 不把这类 session 计入 token usage、daily、models、sessions。
+- 不从 prompt、response、message 或文件大小推算 token，以免生成虚假统计。
 
 ## 增量规则
 
